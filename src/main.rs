@@ -15,12 +15,7 @@ async fn main() {
     let cli = Cli::parse();
     let result = match cli.command {
         Commands::Completions { shell } => {
-            clap_complete::generate(
-                shell,
-                &mut Cli::command(),
-                "velog",
-                &mut std::io::stdout(),
-            );
+            clap_complete::generate(shell, &mut Cli::command(), "velog", &mut std::io::stdout());
             return;
         }
         Commands::Auth { command } => match command {
@@ -57,20 +52,10 @@ async fn main() {
                 title,
                 tags,
             } => {
-                handlers::post_edit(
-                    &slug,
-                    file.as_deref(),
-                    title.as_deref(),
-                    tags.as_deref(),
-                )
-                .await
+                handlers::post_edit(&slug, file.as_deref(), title.as_deref(), tags.as_deref()).await
             }
-            PostCommands::Delete { slug, yes } => {
-                handlers::post_delete(&slug, yes).await
-            }
-            PostCommands::Publish { slug } => {
-                handlers::post_publish(&slug).await
-            }
+            PostCommands::Delete { slug, yes } => handlers::post_delete(&slug, yes).await,
+            PostCommands::Publish { slug } => handlers::post_publish(&slug).await,
         },
     };
 
@@ -81,24 +66,10 @@ async fn main() {
     }
 }
 
-/// 에러 체인에서 AuthError 마커를 찾아 종료 코드 결정
-pub(crate) struct AuthError;
-impl std::fmt::Display for AuthError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "authentication required")
-    }
-}
-impl std::fmt::Debug for AuthError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, f)
-    }
-}
-impl std::error::Error for AuthError {}
-
 /// .context() 래핑 후에도 AuthError를 찾으려면 chain() 순회 필요
 fn exit_code(err: &anyhow::Error) -> i32 {
     for cause in err.chain() {
-        if cause.downcast_ref::<AuthError>().is_some() {
+        if cause.downcast_ref::<auth::AuthError>().is_some() {
             return 2;
         }
     }

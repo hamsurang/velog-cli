@@ -69,6 +69,8 @@ pub struct Post {
     pub released_at: Option<String>,
     pub updated_at: Option<String>,
     pub tags: Option<Vec<String>>,
+    pub meta: Option<serde_json::Value>,
+    pub series_id: Option<String>,
     pub user: Option<PostUser>,
 }
 

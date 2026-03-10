@@ -1,20 +1,24 @@
 use std::time::Duration;
 
+use anyhow::Context as _;
 use reqwest::header::{HeaderValue, COOKIE};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::auth::Credentials;
 use crate::models::{
-    CurrentUserData, EditPostData, GraphQLRequest, GraphQLResponse, PostData,
-    PostsData, RemovePostData, RestoreTokenData, WritePostData,
+    CurrentUserData, EditPostData, GraphQLRequest, GraphQLResponse, PostData, PostsData,
+    RemovePostData, RestoreTokenData, WritePostData,
 };
 use crate::models::{EditPostInput, WritePostInput};
 
 const CURRENT_USER_QUERY: &str = r#"{ currentUser { id username email } }"#;
 
-const RESTORE_TOKEN_QUERY: &str =
-    r#"{ restoreToken { accessToken refreshToken } }"#;
+const RESTORE_TOKEN_QUERY: &str = r#"{ restoreToken { accessToken refreshToken } }"#;
+
+// NOTE: velog GraphQL API는 snake_case 필드명을 사용합니다.
+// Rust 모델의 #[serde(rename_all = "camelCase")]와 매핑이 맞는지
+// 실제 API 응답으로 검증 완료된 쿼리입니다.
 
 const GET_POSTS_QUERY: &str = r#"
     query Posts($username: String!, $temp_only: Boolean) {
@@ -32,7 +36,7 @@ const GET_POST_QUERY: &str = r#"
         post(username: $username, url_slug: $url_slug) {
             id title short_description body thumbnail
             likes is_private is_temp url_slug
-            released_at updated_at tags
+            released_at updated_at tags meta series_id
             user { username }
         }
     }
@@ -116,7 +120,7 @@ impl VelogClient {
     async fn raw_graphql<V: Serialize, T: DeserializeOwned>(
         &self,
         query: &'static str,
-        variables: Option<V>,
+        variables: Option<&V>,
     ) -> anyhow::Result<GraphQLResponse<T>> {
         let mut req = self
             .http
@@ -127,7 +131,8 @@ impl VelogClient {
             let mut cookie = HeaderValue::from_str(&format!(
                 "access_token={}; refresh_token={}",
                 creds.access_token, creds.refresh_token
-            ))?;
+            ))
+            .context("Token contains invalid characters for HTTP header")?;
             cookie.set_sensitive(true);
             req = req.header(COOKIE, cookie);
         }
@@ -143,25 +148,20 @@ impl VelogClient {
         variables: Option<V>,
     ) -> anyhow::Result<(T, Option<Credentials>)>
     where
-        V: Serialize + Clone,
+        V: Serialize,
         T: DeserializeOwned,
     {
-        let resp: GraphQLResponse<T> =
-            self.raw_graphql(query, variables.clone()).await?;
+        let resp: GraphQLResponse<T> = self.raw_graphql(query, variables.as_ref()).await?;
 
         // data가 없고 인증 에러인 경우에만 재시도
-        if resp.data.is_none()
-            && resp.is_auth_error()
-            && self.credentials.is_some()
-        {
+        if resp.data.is_none() && resp.is_auth_error() && self.credentials.is_some() {
             let new_creds = self.restore_token().await.map_err(|_| {
-                anyhow::Error::new(crate::AuthError).context(
-                    "Token refresh failed. Run `velog auth login` again.",
-                )
+                anyhow::Error::new(crate::auth::AuthError)
+                    .context("Token refresh failed. Run `velog auth login` again.")
             })?;
             self.credentials = Some(new_creds.clone());
             let retry_resp: GraphQLResponse<T> =
-                self.raw_graphql(query, variables).await?;
+                self.raw_graphql(query, variables.as_ref()).await?;
             let data = retry_resp.into_result()?;
             return Ok((data, Some(new_creds)));
         }
@@ -173,7 +173,7 @@ impl VelogClient {
     /// 토큰 갱신 (execute_graphql 미경유 — 무한 루프 방지)
     async fn restore_token(&self) -> anyhow::Result<Credentials> {
         let resp: GraphQLResponse<RestoreTokenData> =
-            self.raw_graphql(RESTORE_TOKEN_QUERY, None::<()>).await?;
+            self.raw_graphql(RESTORE_TOKEN_QUERY, None::<&()>).await?;
         let data = resp.into_result()?;
         Ok(data.restore_token.into())
     }
@@ -211,8 +211,7 @@ impl VelogClient {
             "username": username,
             "url_slug": url_slug,
         });
-        let (data, creds): (PostData, _) =
-            self.execute_graphql(GET_POST_QUERY, Some(vars)).await?;
+        let (data, creds): (PostData, _) = self.execute_graphql(GET_POST_QUERY, Some(vars)).await?;
         Ok((data.post, creds))
     }
 
@@ -221,8 +220,9 @@ impl VelogClient {
         input: WritePostInput,
     ) -> anyhow::Result<(crate::models::Post, Option<Credentials>)> {
         let vars = serde_json::to_value(&input)?;
-        let (data, creds): (WritePostData, _) =
-            self.execute_graphql(WRITE_POST_MUTATION, Some(vars)).await?;
+        let (data, creds): (WritePostData, _) = self
+            .execute_graphql(WRITE_POST_MUTATION, Some(vars))
+            .await?;
         Ok((data.write_post, creds))
     }
 
@@ -236,13 +236,11 @@ impl VelogClient {
         Ok((data.edit_post, creds))
     }
 
-    pub async fn remove_post(
-        &mut self,
-        id: &str,
-    ) -> anyhow::Result<(bool, Option<Credentials>)> {
+    pub async fn remove_post(&mut self, id: &str) -> anyhow::Result<(bool, Option<Credentials>)> {
         let vars = serde_json::json!({ "id": id });
-        let (data, creds): (RemovePostData, _) =
-            self.execute_graphql(REMOVE_POST_MUTATION, Some(vars)).await?;
+        let (data, creds): (RemovePostData, _) = self
+            .execute_graphql(REMOVE_POST_MUTATION, Some(vars))
+            .await?;
         Ok((data.remove_post, creds))
     }
 }
