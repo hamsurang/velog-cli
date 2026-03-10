@@ -40,13 +40,19 @@ impl<T> GraphQLResponse<T> {
     pub fn is_auth_error(&self) -> bool {
         self.errors.as_ref().is_some_and(|errs| {
             errs.iter().any(|e| {
-                e.message.contains("not logged in")
-                    || e.message.contains("Unauthorized")
-                    || e.extensions
-                        .as_ref()
-                        .and_then(|ext| ext.get("code"))
-                        .and_then(|v| v.as_str())
-                        .is_some_and(|c| c == "UNAUTHENTICATED")
+                // 1차: extension code (안정적, 서버 메시지 변경에 무관)
+                let has_code = e
+                    .extensions
+                    .as_ref()
+                    .and_then(|ext| ext.get("code"))
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|c| c == "UNAUTHENTICATED");
+                // 2차: 메시지 fallback (구형 응답 호환, 대소문자 무시)
+                let has_msg = {
+                    let msg = e.message.to_lowercase();
+                    msg.contains("not logged in") || msg.contains("unauthorized")
+                };
+                has_code || has_msg
             })
         })
     }
@@ -54,7 +60,6 @@ impl<T> GraphQLResponse<T> {
 
 // ---- Domain Models ----
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 pub struct Post {
     pub id: String,
@@ -70,8 +75,26 @@ pub struct Post {
     pub updated_at: Option<String>,
     pub tags: Option<Vec<String>>,
     pub meta: Option<serde_json::Value>,
-    pub series_id: Option<String>,
     pub user: Option<PostUser>,
+}
+
+impl Post {
+    /// 기존 Post를 EditPostInput으로 변환 (모든 필드 보존)
+    pub fn into_edit_input(self) -> EditPostInput {
+        EditPostInput {
+            id: self.id,
+            title: self.title,
+            body: self.body.unwrap_or_default(),
+            tags: self.tags.unwrap_or_default(),
+            is_markdown: true,
+            is_temp: self.is_temp,
+            is_private: self.is_private,
+            url_slug: self.url_slug,
+            thumbnail: self.thumbnail,
+            meta: self.meta.unwrap_or_else(|| serde_json::json!({})),
+            series_id: None,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -95,12 +118,22 @@ pub struct UserToken {
     pub refresh_token: String,
 }
 
+impl std::fmt::Debug for UserToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserToken")
+            .field("access_token", &"[REDACTED]")
+            .field("refresh_token", &"[REDACTED]")
+            .finish()
+    }
+}
+
 /// restoreToken 응답(UserToken) → 디스크 저장용(Credentials) 변환
 impl From<UserToken> for crate::auth::Credentials {
     fn from(t: UserToken) -> Self {
         Self {
             access_token: t.access_token,
             refresh_token: t.refresh_token,
+            username: None,
         }
     }
 }
@@ -127,19 +160,26 @@ pub struct PostsData {
 
 #[derive(Deserialize)]
 pub struct PostData {
-    pub post: Post,
+    pub post: Option<Post>,
+}
+
+/// Mutation 응답용 최소 구조체 (v2 API는 mutation에서 일부 필드를 null 반환)
+#[derive(Deserialize, Debug)]
+pub struct MutationPostResult {
+    pub id: String,
+    pub url_slug: String,
 }
 
 #[derive(Deserialize)]
 pub struct WritePostData {
     #[serde(rename = "writePost")]
-    pub write_post: Post,
+    pub write_post: MutationPostResult,
 }
 
 #[derive(Deserialize)]
 pub struct EditPostData {
     #[serde(rename = "editPost")]
-    pub edit_post: Post,
+    pub edit_post: MutationPostResult,
 }
 
 #[derive(Deserialize)]
@@ -150,7 +190,6 @@ pub struct RemovePostData {
 
 // ---- Mutation Input Types ----
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct WritePostInput {
     pub title: String,
     pub body: String,
@@ -165,7 +204,6 @@ pub struct WritePostInput {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct EditPostInput {
     pub id: String,
     pub title: String,

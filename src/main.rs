@@ -1,11 +1,7 @@
-mod auth;
-mod cli;
-mod client;
-mod handlers;
-mod models;
-
 use clap::{CommandFactory, Parser};
-use cli::{AuthCommands, Cli, Commands, PostCommands};
+use velog_cli::auth;
+use velog_cli::cli::{AuthCommands, Cli, Commands, PostCommands};
+use velog_cli::handlers;
 
 // NOTE: `colored` 크레이트는 NO_COLOR, CLICOLOR 환경변수를 자동 인식.
 // 모든 사용자 메시지는 eprintln! (stderr), 데이터 출력만 println! (stdout).

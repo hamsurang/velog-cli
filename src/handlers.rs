@@ -7,7 +7,7 @@ use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 
 use crate::auth::{self, AuthError, Credentials};
 use crate::client::VelogClient;
-use crate::models::{EditPostInput, Post, User, WritePostInput};
+use crate::models::{Post, WritePostInput};
 
 // ---- Helper functions ----
 
@@ -26,13 +26,35 @@ fn maybe_save_creds(creds: Option<Credentials>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 인증 + 클라이언트 생성 + 현재 유저 조회를 한번에 수행
-async fn with_auth_client() -> anyhow::Result<(VelogClient, User)> {
+/// 인증 + 클라이언트 생성 + username 확보 (캐시 우선, 미스 시 API 호출)
+async fn with_auth_client() -> anyhow::Result<(VelogClient, String)> {
     let creds = require_auth()?;
-    let mut client = VelogClient::new(creds)?;
-    let (user, new_creds) = client.current_user().await?;
-    maybe_save_creds(new_creds)?;
-    Ok((client, user))
+    let mut client = VelogClient::new(creds.clone())?;
+
+    let username = if let Some(u) = creds.username {
+        u
+    } else {
+        // 캐시 미스: API 호출 후 username 저장
+        let (user, new_creds) = client.current_user().await?;
+        let mut save_creds = new_creds.unwrap_or(creds);
+        save_creds.username = Some(user.username.clone());
+        auth::save_credentials(&save_creds)?;
+        user.username
+    };
+
+    Ok((client, username))
+}
+
+/// 쉼표 구분 태그 문자열 파싱 + 중복 제거
+fn parse_tags(tags: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    for raw in tags.split(',') {
+        let t = raw.trim().to_string();
+        if !t.is_empty() && !result.contains(&t) {
+            result.push(t);
+        }
+    }
+    result
 }
 
 /// 파일 경로 또는 stdin에서 마크다운 본문 읽기
@@ -85,6 +107,7 @@ pub async fn auth_login() -> anyhow::Result<()> {
     let creds = Credentials {
         access_token: access_token.trim().to_string(),
         refresh_token: refresh_token.trim().to_string(),
+        username: None,
     };
 
     // 실제 API 호출로 토큰 유효성 최종 확인
@@ -93,15 +116,23 @@ pub async fn auth_login() -> anyhow::Result<()> {
         .current_user()
         .await
         .context("Token validation failed. The tokens may be expired.")?;
-    let creds = new_creds.unwrap_or(creds);
+    let mut creds = new_creds.unwrap_or(creds);
+    creds.username = Some(user.username.clone());
     auth::save_credentials(&creds)?;
 
     eprintln!("{} Logged in as {}", "✓".green(), user.username.bold());
+    if let Ok(path) = auth::credentials_path() {
+        eprintln!("  Credentials saved to {}", path.display());
+    }
     Ok(())
 }
 
 pub async fn auth_status() -> anyhow::Result<()> {
-    let (_client, user) = with_auth_client().await?;
+    // auth_status는 email 표시를 위해 currentUser API 호출 유지
+    let creds = require_auth()?;
+    let mut client = VelogClient::new(creds)?;
+    let (user, new_creds) = client.current_user().await?;
+    maybe_save_creds(new_creds)?;
 
     eprintln!("{} Logged in as {}", "✓".green(), user.username.bold());
     if let Some(email) = &user.email {
@@ -119,8 +150,8 @@ pub fn auth_logout() -> anyhow::Result<()> {
 // ---- Post handlers ----
 
 pub async fn post_list(drafts: bool) -> anyhow::Result<()> {
-    let (mut client, user) = with_auth_client().await?;
-    let (posts, new_creds) = client.get_posts(&user.username, drafts).await?;
+    let (mut client, username) = with_auth_client().await?;
+    let (posts, new_creds) = client.get_posts(&username, drafts).await?;
     maybe_save_creds(new_creds)?;
 
     if posts.is_empty() {
@@ -139,8 +170,8 @@ pub async fn post_show(slug: &str, username: Option<&str>) -> anyhow::Result<()>
         };
         client.get_post(uname, slug).await?
     } else {
-        let (mut client, user) = with_auth_client().await?;
-        client.get_post(&user.username, slug).await?
+        let (mut client, username) = with_auth_client().await?;
+        client.get_post(&username, slug).await?
     };
     maybe_save_creds(new_creds)?;
     print_post_detail(&post);
@@ -155,7 +186,7 @@ pub async fn post_create(
     publish: bool,
     private: bool,
 ) -> anyhow::Result<()> {
-    let (mut client, user) = with_auth_client().await?;
+    let (mut client, username) = with_auth_client().await?;
 
     let body = read_body(file)?;
     anyhow::ensure!(!body.trim().is_empty(), "Post body is empty");
@@ -192,11 +223,7 @@ pub async fn post_create(
     };
 
     // tags 파싱
-    let tag_list: Vec<String> = tags
-        .split(',')
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
-        .collect();
+    let tag_list = parse_tags(tags);
 
     let input = WritePostInput {
         title: title.to_string(),
@@ -220,7 +247,7 @@ pub async fn post_create(
         "Saved as draft"
     };
     eprintln!("{}: {}", status.green(), title);
-    println!("https://velog.io/@{}/{}", user.username, url_slug);
+    println!("https://velog.io/@{}/{}", username, url_slug);
     Ok(())
 }
 
@@ -230,48 +257,33 @@ pub async fn post_edit(
     title: Option<&str>,
     tags: Option<&str>,
 ) -> anyhow::Result<()> {
-    let (mut client, user) = with_auth_client().await?;
-    let (existing, new_creds) = client.get_post(&user.username, slug).await?;
+    let (mut client, username) = with_auth_client().await?;
+    let (existing, new_creds) = client.get_post(&username, slug).await?;
     maybe_save_creds(new_creds)?;
 
-    let new_body = match file {
-        Some(p) => read_body(Some(p))?,
-        None => existing.body.unwrap_or_default(),
-    };
-    let new_title = title.map(String::from).unwrap_or(existing.title);
-    let new_tags = match tags {
-        Some(t) => t
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-        None => existing.tags.unwrap_or_default(),
-    };
+    let url_slug = existing.url_slug.clone();
+    let mut input = existing.into_edit_input();
+    if let Some(p) = file {
+        input.body = read_body(Some(p))?;
+    }
+    if let Some(t) = title {
+        input.title = t.to_string();
+    }
+    if let Some(t) = tags {
+        input.tags = parse_tags(t);
+    }
 
-    let input = EditPostInput {
-        id: existing.id,
-        title: new_title,
-        body: new_body,
-        tags: new_tags,
-        is_markdown: true,
-        is_temp: existing.is_temp,
-        is_private: existing.is_private,
-        url_slug: existing.url_slug.clone(),
-        thumbnail: existing.thumbnail,
-        meta: existing.meta.unwrap_or_else(|| serde_json::json!({})),
-        series_id: existing.series_id,
-    };
     let (_post, new_creds) = client.edit_post(input).await?;
     maybe_save_creds(new_creds)?;
 
     eprintln!("{}", "Post updated.".green());
-    println!("https://velog.io/@{}/{}", user.username, existing.url_slug);
+    println!("https://velog.io/@{}/{}", username, url_slug);
     Ok(())
 }
 
 pub async fn post_delete(slug: &str, yes: bool) -> anyhow::Result<()> {
-    let (mut client, user) = with_auth_client().await?;
-    let (post, new_creds) = client.get_post(&user.username, slug).await?;
+    let (mut client, username) = with_auth_client().await?;
+    let (post, new_creds) = client.get_post(&username, slug).await?;
     maybe_save_creds(new_creds)?;
 
     if !yes {
@@ -298,8 +310,8 @@ pub async fn post_delete(slug: &str, yes: bool) -> anyhow::Result<()> {
 }
 
 pub async fn post_publish(slug: &str) -> anyhow::Result<()> {
-    let (mut client, user) = with_auth_client().await?;
-    let (existing, new_creds) = client.get_post(&user.username, slug).await?;
+    let (mut client, username) = with_auth_client().await?;
+    let (existing, new_creds) = client.get_post(&username, slug).await?;
     maybe_save_creds(new_creds)?;
 
     if !existing.is_temp {
@@ -307,24 +319,15 @@ pub async fn post_publish(slug: &str) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let input = EditPostInput {
-        id: existing.id,
-        title: existing.title,
-        body: existing.body.unwrap_or_default(),
-        tags: existing.tags.unwrap_or_default(),
-        is_markdown: true,
-        is_temp: false,
-        is_private: existing.is_private,
-        url_slug: existing.url_slug.clone(),
-        thumbnail: existing.thumbnail,
-        meta: existing.meta.unwrap_or_else(|| serde_json::json!({})),
-        series_id: existing.series_id,
-    };
+    let url_slug = existing.url_slug.clone();
+    let mut input = existing.into_edit_input();
+    input.is_temp = false;
+
     let (_post, new_creds) = client.edit_post(input).await?;
     maybe_save_creds(new_creds)?;
 
     eprintln!("{} Post published.", "✓".green());
-    println!("https://velog.io/@{}/{}", user.username, existing.url_slug);
+    println!("https://velog.io/@{}/{}", username, url_slug);
     Ok(())
 }
 
@@ -335,7 +338,7 @@ fn print_posts_table(posts: &[Post]) {
     table
         .load_preset(UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(vec!["Title", "Status", "Tags", "Date"]);
+        .set_header(vec!["Title", "Slug", "Status", "Tags", "Date"]);
 
     for post in posts {
         let status = if post.is_temp {
@@ -357,7 +360,7 @@ fn print_posts_table(posts: &[Post]) {
             .take(10)
             .collect::<String>();
 
-        table.add_row(vec![&post.title, &status, &tags, &date]);
+        table.add_row(vec![&post.title, &post.url_slug, &status, &tags, &date]);
     }
 
     println!("{table}");

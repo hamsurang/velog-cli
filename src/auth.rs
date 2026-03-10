@@ -8,6 +8,18 @@ use std::path::PathBuf;
 pub struct Credentials {
     pub access_token: String,
     pub refresh_token: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+}
+
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Credentials")
+            .field("access_token", &"[REDACTED]")
+            .field("refresh_token", &"[REDACTED]")
+            .field("username", &self.username)
+            .finish()
+    }
 }
 
 /// 인증 필요 에러 마커 (exit code 2)
@@ -35,7 +47,7 @@ fn config_dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
-fn credentials_path() -> Result<PathBuf> {
+pub fn credentials_path() -> Result<PathBuf> {
     Ok(config_dir()?.join("credentials.json"))
 }
 
@@ -52,11 +64,22 @@ pub fn save_credentials(creds: &Credentials) -> Result<()> {
     let path = credentials_path()?;
     let tmp = path.with_extension("json.tmp");
     let content = serde_json::to_string_pretty(creds)?;
-    std::fs::write(&tmp, &content)?;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&tmp)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&tmp, &content)?;
     }
     std::fs::rename(&tmp, &path)?;
     Ok(())
@@ -100,7 +123,28 @@ pub fn validate_velog_jwt(token: &str, expected_sub: &str) -> Result<()> {
         bail!("Token is not from velog.io (unexpected issuer)");
     }
     if claims["sub"].as_str() != Some(expected_sub) {
-        bail!("Expected {} token, got {:?}", expected_sub, claims["sub"]);
+        bail!(
+            "Expected {} token, but got a different sub claim",
+            expected_sub
+        );
+    }
+    // exp 만료 검증 (경고만 — refresh로 복구 가능)
+    if let Some(exp) = claims["exp"].as_u64() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        if exp < now {
+            eprintln!(
+                "Warning: {} token is expired. It will be refreshed automatically.",
+                expected_sub
+            );
+        } else if exp < now + 300 {
+            eprintln!(
+                "Warning: {} token expires in less than 5 minutes.",
+                expected_sub
+            );
+        }
     }
     Ok(())
 }
