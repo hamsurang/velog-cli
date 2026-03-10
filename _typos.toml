@@ -1,0 +1,3 @@
+[default.extend-words]
+# JWT standard header field name (RFC 7515)
+typ = "typ"
