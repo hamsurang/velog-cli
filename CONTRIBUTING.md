@@ -23,6 +23,9 @@ Please ensure:
 cargo fmt-check && cargo lint && cargo test
 ```
 
+> **Tip:** Run `lefthook install` to have these checks run automatically on every commit.
+> To skip hooks for WIP commits: `git commit --no-verify`
+
 ## Project Structure
 
 ```
