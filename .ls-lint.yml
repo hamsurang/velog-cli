@@ -1,0 +1,13 @@
+ls:
+  src:
+    .rs: snake_case
+  tests:
+    .rs: snake_case
+  .github:
+    .yml: kebab-case
+
+ignore:
+  - target
+  - .git
+  - .omc
+  - docs
