@@ -10,7 +10,8 @@ A command-line interface for [velog.io](https://velog.io). Manage your blog post
 ### Homebrew (macOS)
 
 ```bash
-brew install hamsurang/velog-cli/velog-cli
+brew tap hamsurang/velog-cli
+brew install velog-cli
 ```
 
 ### Cargo
@@ -99,7 +100,24 @@ velog-cli communicates with velog.io's GraphQL API. Tokens are stored securely i
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+### Development Setup
+
+```bash
+# Install lefthook (git hooks manager)
+brew install lefthook
+
+# Install typos (spell checker)
+brew install typos-cli
+
+# Activate pre-commit hooks
+lefthook install
+```
+
+Pre-commit hooks automatically run `cargo fmt-check`, `clippy`, `typos`, and `cargo test` on every commit.
+
+> **Note:** `audit` and `ls-lint` are CI-only checks. To run ls-lint locally: `npx @ls-lint/ls-lint`
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full guidelines.
 
 ## License
 
@@ -115,7 +133,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
 # Homebrew (macOS)
-brew install hamsurang/velog-cli/velog-cli
+brew tap hamsurang/velog-cli
+brew install velog-cli
 
 # Cargo
 cargo install velog-cli
@@ -142,6 +161,25 @@ velog post delete my-slug
 # 6. 임시 글 발행
 velog post publish my-slug
 ```
+
+### 기여하기
+
+```bash
+# lefthook 설치 (git hooks 매니저)
+brew install lefthook
+
+# typos 설치 (맞춤법 검사)
+brew install typos-cli
+
+# pre-commit hooks 활성화
+lefthook install
+```
+
+커밋 시 `cargo fmt-check`, `clippy`, `typos`, `cargo test`가 자동으로 실행됩니다.
+
+> **참고:** `audit`과 `ls-lint`은 CI에서만 실행됩니다. ls-lint를 로컬에서 실행하려면: `npx @ls-lint/ls-lint`
+
+자세한 내용은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
 
 ### 토큰 획득 방법
 

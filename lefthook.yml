@@ -1,0 +1,15 @@
+pre-commit:
+  parallel: true
+  commands:
+    fmt-check:
+      run: cargo fmt-check
+      fail_text: "Formatting error. Run `cargo fmt --all` to fix."
+    clippy:
+      run: cargo lint
+      fail_text: "Clippy warning. Run `cargo lint` to check."
+    typos:
+      run: typos
+      fail_text: "Typo found. Run `typos -w` to auto-fix."
+    test:
+      run: cargo test
+      fail_text: "Test failed. Run `cargo test` to check."
