@@ -146,11 +146,10 @@ impl VelogClient {
             let preview: String = body.chars().take(200).collect();
             anyhow::bail!("API error: status={}, body={}", status, preview);
         }
-        let parsed: GraphQLResponse<T> = serde_json::from_str(&body)
-            .with_context(|| {
-                let preview: String = body.chars().take(200).collect();
-                format!("Failed to parse response: {}", preview)
-            })?;
+        let parsed: GraphQLResponse<T> = serde_json::from_str(&body).with_context(|| {
+            let preview: String = body.chars().take(200).collect();
+            format!("Failed to parse response: {}", preview)
+        })?;
         Ok(parsed)
     }
 
@@ -170,14 +169,12 @@ impl VelogClient {
         // data가 없고 인증 에러인 경우에만 재시도
         if resp.data.is_none() && resp.is_auth_error() && self.credentials.is_some() {
             let mut new_creds = self.restore_token().await.map_err(|e| {
-                anyhow::Error::new(crate::auth::AuthError)
-                    .context(format!("Token refresh failed: {e:#}. Run `velog auth login` again."))
+                anyhow::Error::new(crate::auth::AuthError).context(format!(
+                    "Token refresh failed: {e:#}. Run `velog auth login` again."
+                ))
             })?;
             // 기존 credentials의 cached username 보존
-            new_creds.username = self
-                .credentials
-                .as_ref()
-                .and_then(|c| c.username.clone());
+            new_creds.username = self.credentials.as_ref().and_then(|c| c.username.clone());
             self.credentials = Some(new_creds.clone());
             let retry_resp: GraphQLResponse<T> =
                 self.raw_graphql(url, query, variables.as_ref()).await?;
@@ -191,8 +188,9 @@ impl VelogClient {
 
     /// 토큰 갱신 (execute_graphql 미경유 — 무한 루프 방지)
     async fn restore_token(&self) -> anyhow::Result<Credentials> {
-        let resp: GraphQLResponse<RestoreTokenData> =
-            self.raw_graphql(API_V3, RESTORE_TOKEN_QUERY, None::<&()>).await?;
+        let resp: GraphQLResponse<RestoreTokenData> = self
+            .raw_graphql(API_V3, RESTORE_TOKEN_QUERY, None::<&()>)
+            .await?;
         let data = resp.into_result()?;
         Ok(data.restore_token.into())
     }
@@ -202,8 +200,9 @@ impl VelogClient {
     pub async fn current_user(
         &mut self,
     ) -> anyhow::Result<(crate::models::User, Option<Credentials>)> {
-        let (data, creds): (CurrentUserData, _) =
-            self.execute_graphql(API_V3, CURRENT_USER_QUERY, None::<()>).await?;
+        let (data, creds): (CurrentUserData, _) = self
+            .execute_graphql(API_V3, CURRENT_USER_QUERY, None::<()>)
+            .await?;
         Ok((data.current_user, creds))
     }
 
@@ -216,8 +215,9 @@ impl VelogClient {
             "username": username,
             "temp_only": temp_only,
         });
-        let (data, creds): (PostsData, _) =
-            self.execute_graphql(API_V2, GET_POSTS_QUERY, Some(vars)).await?;
+        let (data, creds): (PostsData, _) = self
+            .execute_graphql(API_V2, GET_POSTS_QUERY, Some(vars))
+            .await?;
         Ok((data.posts, creds))
     }
 
@@ -230,8 +230,12 @@ impl VelogClient {
             "username": username,
             "url_slug": url_slug,
         });
-        let (data, creds): (PostData, _) = self.execute_graphql(API_V2, GET_POST_QUERY, Some(vars)).await?;
-        let post = data.post.ok_or_else(|| anyhow::anyhow!("Post not found: {}", url_slug))?;
+        let (data, creds): (PostData, _) = self
+            .execute_graphql(API_V2, GET_POST_QUERY, Some(vars))
+            .await?;
+        let post = data
+            .post
+            .ok_or_else(|| anyhow::anyhow!("Post not found: {}", url_slug))?;
         Ok((post, creds))
     }
 
@@ -251,8 +255,9 @@ impl VelogClient {
         input: EditPostInput,
     ) -> anyhow::Result<(crate::models::MutationPostResult, Option<Credentials>)> {
         let vars = serde_json::to_value(&input)?;
-        let (data, creds): (EditPostData, _) =
-            self.execute_graphql(API_V2, EDIT_POST_MUTATION, Some(vars)).await?;
+        let (data, creds): (EditPostData, _) = self
+            .execute_graphql(API_V2, EDIT_POST_MUTATION, Some(vars))
+            .await?;
         Ok((data.edit_post, creds))
     }
 

@@ -414,12 +414,18 @@ mod tests {
 
     #[test]
     fn parse_tags_trims_whitespace() {
-        assert_eq!(parse_tags(" rust , cli , blog "), vec!["rust", "cli", "blog"]);
+        assert_eq!(
+            parse_tags(" rust , cli , blog "),
+            vec!["rust", "cli", "blog"]
+        );
     }
 
     #[test]
     fn parse_tags_deduplicates() {
-        assert_eq!(parse_tags("rust,cli,rust,blog,cli"), vec!["rust", "cli", "blog"]);
+        assert_eq!(
+            parse_tags("rust,cli,rust,blog,cli"),
+            vec!["rust", "cli", "blog"]
+        );
     }
 
     #[test]
