@@ -145,9 +145,14 @@ pub async fn auth_login() -> anyhow::Result<()> {
 pub async fn auth_status() -> anyhow::Result<()> {
     // auth_status는 email 표시를 위해 currentUser API 호출 유지
     let creds = require_auth()?;
-    let mut client = VelogClient::new(creds)?;
+    let mut client = VelogClient::new(creds.clone())?;
     let (user, new_creds) = client.current_user().await?;
-    maybe_save_creds(new_creds)?;
+    // username 캐싱 (refresh 된 credentials 또는 기존 credentials에 username 저장)
+    let mut save_creds = new_creds.unwrap_or(creds);
+    if save_creds.username.is_none() {
+        save_creds.username = Some(user.username.clone());
+        auth::save_credentials(&save_creds)?;
+    }
 
     eprintln!("{} Logged in as {}", "✓".green(), user.username.bold());
     if let Some(email) = &user.email {
@@ -262,11 +267,14 @@ pub async fn post_edit(
     title: Option<&str>,
     tags: Option<&str>,
 ) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        file.is_some() || title.is_some() || tags.is_some(),
+        "Nothing to edit. Provide --file, --title, or --tags."
+    );
     let (mut client, username) = with_auth_client().await?;
     let (existing, new_creds) = client.get_post(&username, slug).await?;
     maybe_save_creds(new_creds)?;
 
-    let url_slug = existing.url_slug.clone();
     let mut input = existing.into_edit_input();
     if let Some(p) = file {
         input.body = read_body(Some(p))?;
@@ -278,11 +286,11 @@ pub async fn post_edit(
         input.tags = parse_tags(t);
     }
 
-    let (_post, new_creds) = client.edit_post(input).await?;
+    let (post, new_creds) = client.edit_post(input).await?;
     maybe_save_creds(new_creds)?;
 
     eprintln!("{}", "Post updated.".green());
-    println!("https://velog.io/@{}/{}", username, url_slug);
+    println!("https://velog.io/@{}/{}", username, post.url_slug);
     Ok(())
 }
 
@@ -324,15 +332,14 @@ pub async fn post_publish(slug: &str) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let url_slug = existing.url_slug.clone();
     let mut input = existing.into_edit_input();
     input.is_temp = false;
 
-    let (_post, new_creds) = client.edit_post(input).await?;
+    let (post, new_creds) = client.edit_post(input).await?;
     maybe_save_creds(new_creds)?;
 
     eprintln!("{} Post published.", "✓".green());
-    println!("https://velog.io/@{}/{}", username, url_slug);
+    println!("https://velog.io/@{}/{}", username, post.url_slug);
     Ok(())
 }
 

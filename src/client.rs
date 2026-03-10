@@ -143,14 +143,14 @@ impl VelogClient {
         let status = resp.status();
         let body = resp.text().await?;
         if body.is_empty() || !status.is_success() {
-            anyhow::bail!(
-                "API error: status={}, body={}",
-                status,
-                &body[..body.len().min(500)]
-            );
+            let preview: String = body.chars().take(200).collect();
+            anyhow::bail!("API error: status={}, body={}", status, preview);
         }
         let parsed: GraphQLResponse<T> = serde_json::from_str(&body)
-            .with_context(|| format!("Failed to parse response: {}", &body[..body.len().min(500)]))?;
+            .with_context(|| {
+                let preview: String = body.chars().take(200).collect();
+                format!("Failed to parse response: {}", preview)
+            })?;
         Ok(parsed)
     }
 
@@ -169,10 +169,15 @@ impl VelogClient {
 
         // data가 없고 인증 에러인 경우에만 재시도
         if resp.data.is_none() && resp.is_auth_error() && self.credentials.is_some() {
-            let new_creds = self.restore_token().await.map_err(|_| {
+            let mut new_creds = self.restore_token().await.map_err(|e| {
                 anyhow::Error::new(crate::auth::AuthError)
-                    .context("Token refresh failed. Run `velog auth login` again.")
+                    .context(format!("Token refresh failed: {e:#}. Run `velog auth login` again."))
             })?;
+            // 기존 credentials의 cached username 보존
+            new_creds.username = self
+                .credentials
+                .as_ref()
+                .and_then(|c| c.username.clone());
             self.credentials = Some(new_creds.clone());
             let retry_resp: GraphQLResponse<T> =
                 self.raw_graphql(url, query, variables.as_ref()).await?;

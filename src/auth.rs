@@ -87,10 +87,11 @@ pub fn save_credentials(creds: &Credentials) -> Result<()> {
 
 pub fn load_credentials() -> Result<Option<Credentials>> {
     let path = credentials_path()?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let content = std::fs::read_to_string(&path).context("Cannot read credentials")?;
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(anyhow::Error::new(e).context("Cannot read credentials")),
+    };
     let creds = serde_json::from_str(&content)
         .context("Credentials file is corrupt. Run `velog auth login` again.")?;
     Ok(Some(creds))
