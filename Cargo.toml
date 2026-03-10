@@ -1,0 +1,52 @@
+[package]
+name = "velog-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI client for velog.io"
+
+[[bin]]
+name = "velog"
+path = "src/main.rs"
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+
+# Async (minimal features for CLI)
+tokio = { version = "1", features = ["rt", "macros"] }
+
+# HTTP (explicit TLS backend, no system openssl dependency)
+reqwest = { version = "0.12", default-features = false, features = [
+    "json", "cookies", "rustls-tls"
+] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+
+# Directories
+dirs = "5"
+
+# Terminal output
+comfy-table = "7"
+colored = "2"
+termimad = "0.30"
+
+# Input
+rpassword = "7"
+
+# Slug generation (Korean → romanized ASCII via deunicode)
+slug = "0.1"
+
+# JWT payload decoding
+base64 = "0.22"
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
