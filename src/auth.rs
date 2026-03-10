@@ -148,3 +148,99 @@ pub fn validate_velog_jwt(token: &str, expected_sub: &str) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
+
+    /// 테스트용 JWT 생성 헬퍼
+    fn make_jwt(claims: &serde_json::Value) -> String {
+        let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"HS256","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(claims.to_string());
+        format!("{}.{}.test_signature", header, payload)
+    }
+
+    #[test]
+    fn validate_jwt_valid_access_token() {
+        let claims = serde_json::json!({
+            "iss": "velog.io",
+            "sub": "access_token",
+            "exp": 9999999999u64,
+        });
+        assert!(validate_velog_jwt(&make_jwt(&claims), "access_token").is_ok());
+    }
+
+    #[test]
+    fn validate_jwt_valid_refresh_token() {
+        let claims = serde_json::json!({
+            "iss": "velog.io",
+            "sub": "refresh_token",
+            "exp": 9999999999u64,
+        });
+        assert!(validate_velog_jwt(&make_jwt(&claims), "refresh_token").is_ok());
+    }
+
+    #[test]
+    fn validate_jwt_not_a_jwt() {
+        assert!(validate_velog_jwt("not-a-jwt", "access_token").is_err());
+    }
+
+    #[test]
+    fn validate_jwt_wrong_issuer() {
+        let claims = serde_json::json!({
+            "iss": "other.io",
+            "sub": "access_token",
+        });
+        let err = validate_velog_jwt(&make_jwt(&claims), "access_token").unwrap_err();
+        assert!(err.to_string().contains("not from velog.io"));
+    }
+
+    #[test]
+    fn validate_jwt_wrong_sub() {
+        let claims = serde_json::json!({
+            "iss": "velog.io",
+            "sub": "refresh_token",
+        });
+        let err = validate_velog_jwt(&make_jwt(&claims), "access_token").unwrap_err();
+        assert!(err.to_string().contains("different sub claim"));
+    }
+
+    #[test]
+    fn validate_jwt_expired_still_ok_with_warning() {
+        // exp 만료는 경고만 출력, 에러 아님
+        let claims = serde_json::json!({
+            "iss": "velog.io",
+            "sub": "access_token",
+            "exp": 1000000000u64,
+        });
+        assert!(validate_velog_jwt(&make_jwt(&claims), "access_token").is_ok());
+    }
+
+    #[test]
+    fn credentials_serde_without_username() {
+        let json = r#"{"access_token":"a","refresh_token":"r"}"#;
+        let creds: Credentials = serde_json::from_str(json).unwrap();
+        assert!(creds.username.is_none());
+    }
+
+    #[test]
+    fn credentials_serde_with_username() {
+        let json = r#"{"access_token":"a","refresh_token":"r","username":"testuser"}"#;
+        let creds: Credentials = serde_json::from_str(json).unwrap();
+        assert_eq!(creds.username.as_deref(), Some("testuser"));
+    }
+
+    #[test]
+    fn credentials_debug_redacts_tokens() {
+        let creds = Credentials {
+            access_token: "secret".into(),
+            refresh_token: "secret".into(),
+            username: Some("user".into()),
+        };
+        let debug = format!("{:?}", creds);
+        assert!(!debug.contains("secret"));
+        assert!(debug.contains("[REDACTED]"));
+    }
+}

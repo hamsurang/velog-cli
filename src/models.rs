@@ -217,3 +217,84 @@ pub struct EditPostInput {
     pub meta: serde_json::Value,
     pub series_id: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_response_with_error(message: &str, code: Option<&str>) -> GraphQLResponse<()> {
+        let extensions = code.map(|c| serde_json::json!({ "code": c }));
+        GraphQLResponse {
+            data: None,
+            errors: Some(vec![GraphQLError {
+                message: message.to_string(),
+                extensions,
+            }]),
+        }
+    }
+
+    #[test]
+    fn is_auth_error_extension_code() {
+        let resp = make_response_with_error("any message", Some("UNAUTHENTICATED"));
+        assert!(resp.is_auth_error());
+    }
+
+    #[test]
+    fn is_auth_error_not_logged_in_message() {
+        let resp = make_response_with_error("not logged in", None);
+        assert!(resp.is_auth_error());
+    }
+
+    #[test]
+    fn is_auth_error_unauthorized_message() {
+        let resp = make_response_with_error("Unauthorized", None);
+        assert!(resp.is_auth_error());
+    }
+
+    #[test]
+    fn is_auth_error_case_insensitive() {
+        let resp = make_response_with_error("NOT LOGGED IN", None);
+        assert!(resp.is_auth_error());
+    }
+
+    #[test]
+    fn is_auth_error_not_auth() {
+        let resp = make_response_with_error("Post not found", None);
+        assert!(!resp.is_auth_error());
+    }
+
+    #[test]
+    fn is_auth_error_no_errors() {
+        let resp: GraphQLResponse<()> = GraphQLResponse {
+            data: Some(()),
+            errors: None,
+        };
+        assert!(!resp.is_auth_error());
+    }
+
+    #[test]
+    fn graphql_response_into_result_with_data() {
+        let resp = GraphQLResponse {
+            data: Some(42),
+            errors: None,
+        };
+        assert_eq!(resp.into_result().unwrap(), 42);
+    }
+
+    #[test]
+    fn graphql_response_into_result_error_only() {
+        let resp = make_response_with_error("something failed", None);
+        let err = resp.into_result().unwrap_err();
+        assert!(err.to_string().contains("something failed"));
+    }
+
+    #[test]
+    fn graphql_response_into_result_empty() {
+        let resp: GraphQLResponse<()> = GraphQLResponse {
+            data: None,
+            errors: None,
+        };
+        let err = resp.into_result().unwrap_err();
+        assert!(err.to_string().contains("Empty"));
+    }
+}

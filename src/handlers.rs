@@ -57,6 +57,21 @@ fn parse_tags(tags: &str) -> Vec<String> {
     result
 }
 
+/// 사용자 지정 slug 유효성 검증
+fn validate_slug(s: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(!s.is_empty(), "Slug cannot be empty");
+    anyhow::ensure!(s.len() <= 255, "Slug too long (max 255 chars)");
+    anyhow::ensure!(
+        s.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            && !s.starts_with('-')
+            && !s.ends_with('-')
+            && !s.contains("--"),
+        "Invalid slug: only lowercase alphanumeric and hyphens allowed (e.g. 'my-first-post')"
+    );
+    Ok(())
+}
+
 /// 파일 경로 또는 stdin에서 마크다운 본문 읽기
 fn read_body(file: Option<&Path>) -> anyhow::Result<String> {
     use std::io::IsTerminal;
@@ -194,17 +209,7 @@ pub async fn post_create(
     // slug 생성
     let url_slug = match slug_override {
         Some(s) => {
-            anyhow::ensure!(!s.is_empty(), "Slug cannot be empty");
-            anyhow::ensure!(s.len() <= 255, "Slug too long (max 255 chars)");
-            anyhow::ensure!(
-                s.bytes().all(|b| b.is_ascii_lowercase()
-                    || b.is_ascii_digit()
-                    || b == b'-')
-                    && !s.starts_with('-')
-                    && !s.ends_with('-')
-                    && !s.contains("--"),
-                "Invalid slug: only lowercase alphanumeric and hyphens allowed (e.g. 'my-first-post')"
-            );
+            validate_slug(s)?;
             s.to_string()
         }
         None => {
@@ -386,5 +391,83 @@ fn print_post_detail(post: &Post) {
     if let Some(body) = &post.body {
         let skin = termimad::MadSkin::default();
         skin.print_text(body);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- parse_tags tests ----
+
+    #[test]
+    fn parse_tags_basic() {
+        assert_eq!(parse_tags("rust,cli,blog"), vec!["rust", "cli", "blog"]);
+    }
+
+    #[test]
+    fn parse_tags_trims_whitespace() {
+        assert_eq!(parse_tags(" rust , cli , blog "), vec!["rust", "cli", "blog"]);
+    }
+
+    #[test]
+    fn parse_tags_deduplicates() {
+        assert_eq!(parse_tags("rust,cli,rust,blog,cli"), vec!["rust", "cli", "blog"]);
+    }
+
+    #[test]
+    fn parse_tags_empty_string() {
+        assert!(parse_tags("").is_empty());
+    }
+
+    #[test]
+    fn parse_tags_only_commas() {
+        assert!(parse_tags(",,,").is_empty());
+    }
+
+    #[test]
+    fn parse_tags_single() {
+        assert_eq!(parse_tags("rust"), vec!["rust"]);
+    }
+
+    // ---- validate_slug tests ----
+
+    #[test]
+    fn validate_slug_valid() {
+        assert!(validate_slug("my-first-post").is_ok());
+        assert!(validate_slug("hello123").is_ok());
+        assert!(validate_slug("a").is_ok());
+    }
+
+    #[test]
+    fn validate_slug_empty() {
+        assert!(validate_slug("").is_err());
+    }
+
+    #[test]
+    fn validate_slug_uppercase() {
+        assert!(validate_slug("My-Post").is_err());
+    }
+
+    #[test]
+    fn validate_slug_double_hyphen() {
+        assert!(validate_slug("my--post").is_err());
+    }
+
+    #[test]
+    fn validate_slug_leading_hyphen() {
+        assert!(validate_slug("-my-post").is_err());
+    }
+
+    #[test]
+    fn validate_slug_trailing_hyphen() {
+        assert!(validate_slug("my-post-").is_err());
+    }
+
+    #[test]
+    fn validate_slug_special_chars() {
+        assert!(validate_slug("my_post").is_err());
+        assert!(validate_slug("my post").is_err());
+        assert!(validate_slug("my.post").is_err());
     }
 }
