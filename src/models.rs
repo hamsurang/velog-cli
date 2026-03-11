@@ -458,9 +458,18 @@ mod tests {
 
     #[test]
     fn compact_status_serializes_abbreviated() {
-        assert_eq!(serde_json::to_string(&CompactStatus::Published).unwrap(), r#""pub""#);
-        assert_eq!(serde_json::to_string(&CompactStatus::Draft).unwrap(), r#""draft""#);
-        assert_eq!(serde_json::to_string(&CompactStatus::Private).unwrap(), r#""priv""#);
+        assert_eq!(
+            serde_json::to_string(&CompactStatus::Published).unwrap(),
+            r#""pub""#
+        );
+        assert_eq!(
+            serde_json::to_string(&CompactStatus::Draft).unwrap(),
+            r#""draft""#
+        );
+        assert_eq!(
+            serde_json::to_string(&CompactStatus::Private).unwrap(),
+            r#""priv""#
+        );
     }
 
     #[test]
@@ -548,7 +557,10 @@ mod tests {
 
     #[test]
     fn compact_error_serializes() {
-        let err = CompactError { error: "Not authenticated".to_string(), exit_code: 2 };
+        let err = CompactError {
+            error: "Not authenticated".to_string(),
+            exit_code: 2,
+        };
         let json = serde_json::to_string(&err).unwrap();
         assert!(json.contains(r#""error":"Not authenticated""#));
         assert!(json.contains(r#""exit_code":2"#));
@@ -556,7 +568,10 @@ mod tests {
 
     #[test]
     fn compact_message_serializes() {
-        let msg = CompactMessage { status: "ok".to_string(), msg: "Post created".to_string() };
+        let msg = CompactMessage {
+            status: "ok".to_string(),
+            msg: "Post created".to_string(),
+        };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains(r#""status":"ok""#));
         assert!(json.contains(r#""msg":"Post created""#));
@@ -564,7 +579,9 @@ mod tests {
 
     #[test]
     fn compact_mutation_result_serializes() {
-        let result = CompactMutationResult { url: "https://velog.io/@user/test".to_string() };
+        let result = CompactMutationResult {
+            url: "https://velog.io/@user/test".to_string(),
+        };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains(r#""url":"https://velog.io/@user/test""#));
     }

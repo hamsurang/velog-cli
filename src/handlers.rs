@@ -296,7 +296,11 @@ pub async fn post_create(
     maybe_save_creds(new_creds)?;
 
     let url = format!("https://velog.io/@{}/{}", username, url_slug);
-    let status_msg = if publish { "Published" } else { "Saved as draft" };
+    let status_msg = if publish {
+        "Published"
+    } else {
+        "Saved as draft"
+    };
 
     match format {
         Format::Pretty => {
@@ -453,7 +457,11 @@ fn print_posts_table(posts: &[Post]) {
         let tags = post.tags.as_ref().map(|t| t.join(", ")).unwrap_or_default();
 
         let date = post.date_short();
-        let date = if date.is_empty() { "-".to_string() } else { date };
+        let date = if date.is_empty() {
+            "-".to_string()
+        } else {
+            date
+        };
 
         table.add_row(vec![&post.title, &post.url_slug, &status, &tags, &date]);
     }

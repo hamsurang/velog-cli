@@ -53,8 +53,14 @@ async fn main() {
                 title,
                 tags,
             } => {
-                handlers::post_edit(&slug, file.as_deref(), title.as_deref(), tags.as_deref(), format)
-                    .await
+                handlers::post_edit(
+                    &slug,
+                    file.as_deref(),
+                    title.as_deref(),
+                    tags.as_deref(),
+                    format,
+                )
+                .await
             }
             PostCommands::Delete { slug, yes } => handlers::post_delete(&slug, yes, format).await,
             PostCommands::Publish { slug } => handlers::post_publish(&slug, format).await,

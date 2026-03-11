@@ -148,7 +148,9 @@ fn compact_auth_login_returns_error() {
         .args(["--format", "compact", "auth", "login"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("auth login requires --format pretty"));
+        .stderr(predicate::str::contains(
+            "auth login requires --format pretty",
+        ));
 }
 
 #[test]
@@ -158,7 +160,9 @@ fn silent_auth_login_returns_error() {
         .args(["--format", "silent", "auth", "login"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("auth login requires --format pretty"));
+        .stderr(predicate::str::contains(
+            "auth login requires --format pretty",
+        ));
 }
 
 #[test]
@@ -170,8 +174,16 @@ fn compact_error_is_json() {
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
     // Should contain JSON with "error" key
-    assert!(stderr.contains(r#""error":"#), "stderr should be JSON: {}", stderr);
-    assert!(stderr.contains(r#""exit_code":"#), "stderr should contain exit_code: {}", stderr);
+    assert!(
+        stderr.contains(r#""error":"#),
+        "stderr should be JSON: {}",
+        stderr
+    );
+    assert!(
+        stderr.contains(r#""exit_code":"#),
+        "stderr should contain exit_code: {}",
+        stderr
+    );
 }
 
 #[test]
@@ -182,7 +194,11 @@ fn silent_error_is_json() {
         .output()
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains(r#""error":"#), "stderr should be JSON: {}", stderr);
+    assert!(
+        stderr.contains(r#""error":"#),
+        "stderr should be JSON: {}",
+        stderr
+    );
 }
 
 #[test]
@@ -190,13 +206,27 @@ fn compact_post_show_nonexistent_error_is_json() {
     // post show with a nonexistent slug should emit JSON error in compact mode
     // (requires auth, so this test may succeed or fail depending on credentials)
     let output = velog_cmd()
-        .args(["--format", "compact", "post", "show", "nonexistent-slug-that-does-not-exist-12345"])
+        .args([
+            "--format",
+            "compact",
+            "post",
+            "show",
+            "nonexistent-slug-that-does-not-exist-12345",
+        ])
         .output()
         .unwrap();
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains(r#""error":"#), "stderr should be JSON in compact mode: {}", stderr);
-        assert!(stderr.contains(r#""exit_code":"#), "stderr should contain exit_code: {}", stderr);
+        assert!(
+            stderr.contains(r#""error":"#),
+            "stderr should be JSON in compact mode: {}",
+            stderr
+        );
+        assert!(
+            stderr.contains(r#""exit_code":"#),
+            "stderr should contain exit_code: {}",
+            stderr
+        );
     }
     // If it somehow succeeds (unlikely), that's also fine — the format flag was accepted
 }
