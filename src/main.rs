@@ -1,7 +1,8 @@
 use clap::{CommandFactory, Parser};
 use velog_cli::auth;
-use velog_cli::cli::{AuthCommands, Cli, Commands, PostCommands};
+use velog_cli::cli::{AuthCommands, Cli, Commands, Format, PostCommands};
 use velog_cli::handlers;
+use velog_cli::output;
 
 // NOTE: `colored` 크레이트는 NO_COLOR, CLICOLOR 환경변수를 자동 인식.
 // 모든 사용자 메시지는 eprintln! (stderr), 데이터 출력만 println! (stdout).
@@ -9,20 +10,23 @@ use velog_cli::handlers;
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let cli = Cli::parse();
+    let format = cli.format;
+
     let result = match cli.command {
         Commands::Completions { shell } => {
+            // Completions are excluded from --format flag
             clap_complete::generate(shell, &mut Cli::command(), "velog", &mut std::io::stdout());
             return;
         }
         Commands::Auth { command } => match command {
-            AuthCommands::Login => handlers::auth_login().await,
-            AuthCommands::Status => handlers::auth_status().await,
-            AuthCommands::Logout => handlers::auth_logout(),
+            AuthCommands::Login => handlers::auth_login(format).await,
+            AuthCommands::Status => handlers::auth_status(format).await,
+            AuthCommands::Logout => handlers::auth_logout(format),
         },
         Commands::Post { command } => match command {
-            PostCommands::List { drafts } => handlers::post_list(drafts).await,
+            PostCommands::List { drafts } => handlers::post_list(drafts, format).await,
             PostCommands::Show { slug, username } => {
-                handlers::post_show(&slug, username.as_deref()).await
+                handlers::post_show(&slug, username.as_deref(), format).await
             }
             PostCommands::Create {
                 file,
@@ -39,6 +43,7 @@ async fn main() {
                     slug.as_deref(),
                     publish,
                     private,
+                    format,
                 )
                 .await
             }
@@ -48,16 +53,24 @@ async fn main() {
                 title,
                 tags,
             } => {
-                handlers::post_edit(&slug, file.as_deref(), title.as_deref(), tags.as_deref()).await
+                handlers::post_edit(&slug, file.as_deref(), title.as_deref(), tags.as_deref(), format)
+                    .await
             }
-            PostCommands::Delete { slug, yes } => handlers::post_delete(&slug, yes).await,
-            PostCommands::Publish { slug } => handlers::post_publish(&slug).await,
+            PostCommands::Delete { slug, yes } => handlers::post_delete(&slug, yes, format).await,
+            PostCommands::Publish { slug } => handlers::post_publish(&slug, format).await,
         },
     };
 
     if let Err(e) = result {
-        eprintln!("{}: {:#}", colored::Colorize::red("error"), e);
         let code = exit_code(&e);
+        match format {
+            Format::Pretty => {
+                eprintln!("{}: {:#}", colored::Colorize::red("error"), e);
+            }
+            Format::Compact | Format::Silent => {
+                output::emit_error(format, &format!("{:#}", e), code);
+            }
+        }
         std::process::exit(code);
     }
 }

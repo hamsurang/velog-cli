@@ -6,8 +6,10 @@ use colored::Colorize;
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 
 use crate::auth::{self, AuthError, Credentials};
+use crate::cli::Format;
 use crate::client::VelogClient;
-use crate::models::{Post, WritePostInput};
+use crate::models::{CompactAuthStatus, CompactPost, Post, WritePostInput};
+use crate::output;
 
 // ---- Helper functions ----
 
@@ -99,7 +101,10 @@ fn read_body(file: Option<&Path>) -> anyhow::Result<String> {
 
 // ---- Auth handlers ----
 
-pub async fn auth_login() -> anyhow::Result<()> {
+pub async fn auth_login(format: Format) -> anyhow::Result<()> {
+    if format != Format::Pretty {
+        anyhow::bail!("auth login requires --format pretty (interactive mode)");
+    }
     eprintln!("Paste your velog tokens (hidden input).");
     eprintln!("Find them in browser DevTools → Application → Cookies → velog.io");
 
@@ -109,7 +114,9 @@ pub async fn auth_login() -> anyhow::Result<()> {
         !access_token.trim().is_empty(),
         "access_token cannot be empty"
     );
-    auth::validate_velog_jwt(access_token.trim(), "access_token")?;
+    for w in auth::validate_velog_jwt(access_token.trim(), "access_token")? {
+        eprintln!("{}", w);
+    }
 
     eprint!("refresh_token: ");
     let refresh_token = rpassword::read_password().context("Failed to read refresh_token")?;
@@ -117,7 +124,9 @@ pub async fn auth_login() -> anyhow::Result<()> {
         !refresh_token.trim().is_empty(),
         "refresh_token cannot be empty"
     );
-    auth::validate_velog_jwt(refresh_token.trim(), "refresh_token")?;
+    for w in auth::validate_velog_jwt(refresh_token.trim(), "refresh_token")? {
+        eprintln!("{}", w);
+    }
 
     let creds = Credentials {
         access_token: access_token.trim().to_string(),
@@ -142,7 +151,7 @@ pub async fn auth_login() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn auth_status() -> anyhow::Result<()> {
+pub async fn auth_status(format: Format) -> anyhow::Result<()> {
     // auth_status는 email 표시를 위해 currentUser API 호출 유지
     let creds = require_auth()?;
     let mut client = VelogClient::new(creds.clone())?;
@@ -154,35 +163,61 @@ pub async fn auth_status() -> anyhow::Result<()> {
         auth::save_credentials(&save_creds)?;
     }
 
-    eprintln!("{} Logged in as {}", "✓".green(), user.username.bold());
-    if let Some(email) = &user.email {
-        eprintln!("  Email: {}", email);
+    match format {
+        Format::Pretty => {
+            eprintln!("{} Logged in as {}", "✓".green(), user.username.bold());
+            if let Some(email) = &user.email {
+                eprintln!("  Email: {}", email);
+            }
+        }
+        Format::Compact | Format::Silent => {
+            let status = CompactAuthStatus {
+                logged_in: true,
+                username: user.username,
+            };
+            output::emit_data(format, &status);
+        }
     }
     Ok(())
 }
 
-pub fn auth_logout() -> anyhow::Result<()> {
+pub fn auth_logout(format: Format) -> anyhow::Result<()> {
     auth::delete_credentials()?;
-    eprintln!("{} Logged out.", "✓".green());
+    match format {
+        Format::Pretty => {
+            eprintln!("{} Logged out.", "✓".green());
+        }
+        Format::Compact | Format::Silent => {
+            output::emit_ok(format, "Logged out");
+        }
+    }
     Ok(())
 }
 
 // ---- Post handlers ----
 
-pub async fn post_list(drafts: bool) -> anyhow::Result<()> {
+pub async fn post_list(drafts: bool, format: Format) -> anyhow::Result<()> {
     let (mut client, username) = with_auth_client().await?;
     let (posts, new_creds) = client.get_posts(&username, drafts).await?;
     maybe_save_creds(new_creds)?;
 
-    if posts.is_empty() {
-        eprintln!("{}", "No posts found.".yellow());
-        return Ok(());
+    match format {
+        Format::Pretty => {
+            if posts.is_empty() {
+                eprintln!("{}", "No posts found.".yellow());
+                return Ok(());
+            }
+            print_posts_table(&posts);
+        }
+        Format::Compact | Format::Silent => {
+            let compact: Vec<CompactPost> = posts.iter().map(CompactPost::from).collect();
+            output::emit_data(format, &compact);
+        }
     }
-    print_posts_table(&posts);
     Ok(())
 }
 
-pub async fn post_show(slug: &str, username: Option<&str>) -> anyhow::Result<()> {
+pub async fn post_show(slug: &str, username: Option<&str>, format: Format) -> anyhow::Result<()> {
     let (post, new_creds) = if let Some(uname) = username {
         let mut client = match auth::load_credentials()? {
             Some(c) => VelogClient::new(c)?,
@@ -194,7 +229,15 @@ pub async fn post_show(slug: &str, username: Option<&str>) -> anyhow::Result<()>
         client.get_post(&username, slug).await?
     };
     maybe_save_creds(new_creds)?;
-    print_post_detail(&post);
+
+    match format {
+        Format::Pretty => {
+            print_post_detail(&post);
+        }
+        Format::Compact | Format::Silent => {
+            output::emit_data(format, &CompactPost::detail(&post));
+        }
+    }
     Ok(())
 }
 
@@ -205,6 +248,7 @@ pub async fn post_create(
     slug_override: Option<&str>,
     publish: bool,
     private: bool,
+    format: Format,
 ) -> anyhow::Result<()> {
     let (mut client, username) = with_auth_client().await?;
 
@@ -251,13 +295,19 @@ pub async fn post_create(
     let (_post, new_creds) = client.write_post(input).await?;
     maybe_save_creds(new_creds)?;
 
-    let status = if publish {
-        "Published"
-    } else {
-        "Saved as draft"
-    };
-    eprintln!("{}: {}", status.green(), title);
-    println!("https://velog.io/@{}/{}", username, url_slug);
+    let url = format!("https://velog.io/@{}/{}", username, url_slug);
+    let status_msg = if publish { "Published" } else { "Saved as draft" };
+
+    match format {
+        Format::Pretty => {
+            eprintln!("{}: {}", status_msg.green(), title);
+            println!("{url}");
+        }
+        Format::Compact | Format::Silent => {
+            output::emit_mutation_result(format, &url);
+            output::emit_ok(format, &format!("{}: {}", status_msg, title));
+        }
+    }
     Ok(())
 }
 
@@ -266,6 +316,7 @@ pub async fn post_edit(
     file: Option<&Path>,
     title: Option<&str>,
     tags: Option<&str>,
+    format: Format,
 ) -> anyhow::Result<()> {
     anyhow::ensure!(
         file.is_some() || title.is_some() || tags.is_some(),
@@ -289,17 +340,29 @@ pub async fn post_edit(
     let (post, new_creds) = client.edit_post(input).await?;
     maybe_save_creds(new_creds)?;
 
-    eprintln!("{}", "Post updated.".green());
-    println!("https://velog.io/@{}/{}", username, post.url_slug);
+    let url = format!("https://velog.io/@{}/{}", username, post.url_slug);
+    match format {
+        Format::Pretty => {
+            eprintln!("{}", "Post updated.".green());
+            println!("{url}");
+        }
+        Format::Compact | Format::Silent => {
+            output::emit_mutation_result(format, &url);
+            output::emit_ok(format, "Post updated");
+        }
+    }
     Ok(())
 }
 
-pub async fn post_delete(slug: &str, yes: bool) -> anyhow::Result<()> {
+pub async fn post_delete(slug: &str, yes: bool, format: Format) -> anyhow::Result<()> {
     let (mut client, username) = with_auth_client().await?;
     let (post, new_creds) = client.get_post(&username, slug).await?;
     maybe_save_creds(new_creds)?;
 
-    if !yes {
+    // In compact/silent mode, auto-confirm deletion (no interactive prompt)
+    let effective_yes = yes || format != Format::Pretty;
+
+    if !effective_yes {
         use std::io::IsTerminal;
         if !std::io::stdin().is_terminal() {
             anyhow::bail!("Refusing to delete in non-interactive mode. Use --yes to confirm.");
@@ -318,17 +381,34 @@ pub async fn post_delete(slug: &str, yes: bool) -> anyhow::Result<()> {
 
     let (_ok, new_creds) = client.remove_post(&post.id).await?;
     maybe_save_creds(new_creds)?;
-    eprintln!("{}", "Post deleted.".green());
+
+    match format {
+        Format::Pretty => {
+            eprintln!("{}", "Post deleted.".green());
+        }
+        Format::Compact | Format::Silent => {
+            output::emit_ok(format, "Post deleted");
+        }
+    }
     Ok(())
 }
 
-pub async fn post_publish(slug: &str) -> anyhow::Result<()> {
+pub async fn post_publish(slug: &str, format: Format) -> anyhow::Result<()> {
     let (mut client, username) = with_auth_client().await?;
     let (existing, new_creds) = client.get_post(&username, slug).await?;
     maybe_save_creds(new_creds)?;
 
     if !existing.is_temp {
-        eprintln!("{}", "Post is already published.".yellow());
+        let url = format!("https://velog.io/@{}/{}", username, existing.url_slug);
+        match format {
+            Format::Pretty => {
+                eprintln!("{}", "Post is already published.".yellow());
+            }
+            Format::Compact | Format::Silent => {
+                output::emit_mutation_result(format, &url);
+                output::emit_ok(format, "Already published");
+            }
+        }
         return Ok(());
     }
 
@@ -338,8 +418,17 @@ pub async fn post_publish(slug: &str) -> anyhow::Result<()> {
     let (post, new_creds) = client.edit_post(input).await?;
     maybe_save_creds(new_creds)?;
 
-    eprintln!("{} Post published.", "✓".green());
-    println!("https://velog.io/@{}/{}", username, post.url_slug);
+    let url = format!("https://velog.io/@{}/{}", username, post.url_slug);
+    match format {
+        Format::Pretty => {
+            eprintln!("{} Post published.", "✓".green());
+            println!("{url}");
+        }
+        Format::Compact | Format::Silent => {
+            output::emit_mutation_result(format, &url);
+            output::emit_ok(format, "Post published");
+        }
+    }
     Ok(())
 }
 
@@ -363,14 +452,8 @@ fn print_posts_table(posts: &[Post]) {
 
         let tags = post.tags.as_ref().map(|t| t.join(", ")).unwrap_or_default();
 
-        let date = post
-            .released_at
-            .as_deref()
-            .or(post.updated_at.as_deref())
-            .unwrap_or("-")
-            .chars()
-            .take(10)
-            .collect::<String>();
+        let date = post.date_short();
+        let date = if date.is_empty() { "-".to_string() } else { date };
 
         table.add_row(vec![&post.title, &post.url_slug, &status, &tags, &date]);
     }

@@ -79,6 +79,17 @@ pub struct Post {
 }
 
 impl Post {
+    /// 날짜 표시용: released_at 우선, updated_at fallback, YYYY-MM-DD만
+    pub fn date_short(&self) -> String {
+        self.released_at
+            .as_deref()
+            .or(self.updated_at.as_deref())
+            .unwrap_or("")
+            .chars()
+            .take(10)
+            .collect()
+    }
+
     /// 기존 Post를 EditPostInput으로 변환 (모든 필드 보존)
     pub fn into_edit_input(self) -> EditPostInput {
         EditPostInput {
@@ -186,6 +197,99 @@ pub struct EditPostData {
 pub struct RemovePostData {
     #[serde(rename = "removePost")]
     pub remove_post: bool,
+}
+
+// ---- Compact Output Types ----
+// Used by --format compact/silent for token-optimized JSON output.
+
+/// Compact status: synthesized from Post.is_temp + Post.is_private
+#[derive(Serialize, Debug, PartialEq)]
+pub enum CompactStatus {
+    #[serde(rename = "pub")]
+    Published,
+    #[serde(rename = "draft")]
+    Draft,
+    #[serde(rename = "priv")]
+    Private,
+}
+
+/// Compact post representation (list: body omitted, detail: body included)
+#[derive(Serialize, Debug)]
+pub struct CompactPost {
+    pub title: String,
+    pub slug: String,
+    pub status: CompactStatus,
+    pub tags: Vec<String>,
+    pub date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+}
+
+/// Compact auth status for `auth status`
+#[derive(Serialize, Debug)]
+pub struct CompactAuthStatus {
+    pub logged_in: bool,
+    pub username: String,
+}
+
+/// Compact mutation result for create/edit/publish
+#[derive(Serialize, Debug)]
+pub struct CompactMutationResult {
+    pub url: String,
+}
+
+/// Compact status message for stderr
+#[derive(Serialize, Debug)]
+pub struct CompactMessage {
+    pub status: String,
+    pub msg: String,
+}
+
+/// Compact error for stderr
+#[derive(Serialize, Debug)]
+pub struct CompactError {
+    pub error: String,
+    pub exit_code: i32,
+}
+
+impl CompactStatus {
+    pub fn from_post(post: &Post) -> Self {
+        if post.is_temp {
+            CompactStatus::Draft
+        } else if post.is_private {
+            CompactStatus::Private
+        } else {
+            CompactStatus::Published
+        }
+    }
+}
+
+impl From<&Post> for CompactPost {
+    /// Summary view (post list) — body is omitted
+    fn from(post: &Post) -> Self {
+        CompactPost {
+            title: post.title.clone(),
+            slug: post.url_slug.clone(),
+            status: CompactStatus::from_post(post),
+            tags: post.tags.clone().unwrap_or_default(),
+            date: post.date_short(),
+            body: None,
+        }
+    }
+}
+
+impl CompactPost {
+    /// Detail view (post show) — includes body
+    pub fn detail(post: &Post) -> Self {
+        CompactPost {
+            title: post.title.clone(),
+            slug: post.url_slug.clone(),
+            status: CompactStatus::from_post(post),
+            tags: post.tags.clone().unwrap_or_default(),
+            date: post.date_short(),
+            body: Some(post.body.clone().unwrap_or_default()),
+        }
+    }
 }
 
 // ---- Mutation Input Types ----
@@ -296,5 +400,172 @@ mod tests {
         };
         let err = resp.into_result().unwrap_err();
         assert!(err.to_string().contains("Empty"));
+    }
+
+    // ---- Compact output type tests ----
+
+    fn make_test_post(is_temp: bool, is_private: bool) -> Post {
+        Post {
+            id: "test-id".to_string(),
+            title: "Test Post".to_string(),
+            short_description: None,
+            body: Some("# Hello\nworld".to_string()),
+            thumbnail: None,
+            likes: 0,
+            is_private,
+            is_temp,
+            url_slug: "test-post".to_string(),
+            released_at: Some("2026-03-10T12:00:00.000Z".to_string()),
+            updated_at: Some("2026-03-11T12:00:00.000Z".to_string()),
+            tags: Some(vec!["rust".to_string(), "cli".to_string()]),
+            meta: None,
+            user: None,
+        }
+    }
+
+    #[test]
+    fn compact_status_published() {
+        assert_eq!(
+            CompactStatus::from_post(&make_test_post(false, false)),
+            CompactStatus::Published
+        );
+    }
+
+    #[test]
+    fn compact_status_draft() {
+        assert_eq!(
+            CompactStatus::from_post(&make_test_post(true, false)),
+            CompactStatus::Draft
+        );
+    }
+
+    #[test]
+    fn compact_status_private() {
+        assert_eq!(
+            CompactStatus::from_post(&make_test_post(false, true)),
+            CompactStatus::Private
+        );
+    }
+
+    #[test]
+    fn compact_status_draft_takes_precedence_over_private() {
+        // is_temp=true takes precedence: a draft that is also private shows as "draft"
+        assert_eq!(
+            CompactStatus::from_post(&make_test_post(true, true)),
+            CompactStatus::Draft
+        );
+    }
+
+    #[test]
+    fn compact_status_serializes_abbreviated() {
+        assert_eq!(serde_json::to_string(&CompactStatus::Published).unwrap(), r#""pub""#);
+        assert_eq!(serde_json::to_string(&CompactStatus::Draft).unwrap(), r#""draft""#);
+        assert_eq!(serde_json::to_string(&CompactStatus::Private).unwrap(), r#""priv""#);
+    }
+
+    #[test]
+    fn compact_post_from_published() {
+        let post = make_test_post(false, false);
+        let compact = CompactPost::from(&post);
+        assert_eq!(compact.title, "Test Post");
+        assert_eq!(compact.slug, "test-post");
+        assert_eq!(compact.status, CompactStatus::Published);
+        assert_eq!(compact.tags, vec!["rust", "cli"]);
+        assert_eq!(compact.date, "2026-03-10");
+    }
+
+    #[test]
+    fn compact_post_serializes_to_json() {
+        let post = make_test_post(false, false);
+        let compact = CompactPost::from(&post);
+        let json = serde_json::to_string(&compact).unwrap();
+        assert!(json.contains(r#""status":"pub""#));
+        assert!(json.contains(r#""slug":"test-post""#));
+        assert!(json.contains(r#""date":"2026-03-10""#));
+    }
+
+    #[test]
+    fn compact_post_detail_includes_body() {
+        let post = make_test_post(true, false);
+        let detail = CompactPost::detail(&post);
+        assert_eq!(detail.body.as_deref(), Some("# Hello\nworld"));
+        assert_eq!(detail.status, CompactStatus::Draft);
+    }
+
+    #[test]
+    fn compact_post_summary_omits_body() {
+        let post = make_test_post(false, false);
+        let compact = CompactPost::from(&post);
+        assert!(compact.body.is_none());
+        // body should not appear in JSON at all
+        let json = serde_json::to_string(&compact).unwrap();
+        assert!(!json.contains("body"));
+    }
+
+    #[test]
+    fn compact_post_empty_tags() {
+        let mut post = make_test_post(false, false);
+        post.tags = None;
+        let compact = CompactPost::from(&post);
+        assert!(compact.tags.is_empty());
+    }
+
+    #[test]
+    fn compact_post_no_date_fallback_to_updated() {
+        let mut post = make_test_post(false, false);
+        post.released_at = None;
+        let compact = CompactPost::from(&post);
+        assert_eq!(compact.date, "2026-03-11");
+    }
+
+    #[test]
+    fn compact_post_no_dates() {
+        let mut post = make_test_post(false, false);
+        post.released_at = None;
+        post.updated_at = None;
+        let compact = CompactPost::from(&post);
+        assert_eq!(compact.date, "");
+    }
+
+    #[test]
+    fn compact_post_list_serializes_as_array() {
+        let posts = vec![
+            CompactPost::from(&make_test_post(false, false)),
+            CompactPost::from(&make_test_post(true, false)),
+        ];
+        let json = serde_json::to_string(&posts).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.is_array());
+        assert_eq!(parsed.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn compact_post_empty_list_serializes_as_empty_array() {
+        let posts: Vec<CompactPost> = vec![];
+        let json = serde_json::to_string(&posts).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn compact_error_serializes() {
+        let err = CompactError { error: "Not authenticated".to_string(), exit_code: 2 };
+        let json = serde_json::to_string(&err).unwrap();
+        assert!(json.contains(r#""error":"Not authenticated""#));
+        assert!(json.contains(r#""exit_code":2"#));
+    }
+
+    #[test]
+    fn compact_message_serializes() {
+        let msg = CompactMessage { status: "ok".to_string(), msg: "Post created".to_string() };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains(r#""status":"ok""#));
+        assert!(json.contains(r#""msg":"Post created""#));
+    }
+
+    #[test]
+    fn compact_mutation_result_serializes() {
+        let result = CompactMutationResult { url: "https://velog.io/@user/test".to_string() };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains(r#""url":"https://velog.io/@user/test""#));
     }
 }
