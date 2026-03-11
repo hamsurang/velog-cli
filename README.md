@@ -55,6 +55,27 @@ velog post create --title "My Post" --file post.md --tags "rust,cli" --publish
 velog post edit my-post-slug --file updated.md --title "Updated Title"
 ```
 
+## Output Formats
+
+Use `--format` to control output style:
+
+| Format | Description | Use case |
+|--------|-------------|----------|
+| `pretty` | Tables, colors, markdown rendering (default) | Interactive terminal use |
+| `compact` | Minified JSON | AI agents, scripts, pipelines |
+| `silent` | Queries emit JSON, mutations emit nothing | CI/CD, exit-code-only checks |
+
+```bash
+# Human-friendly (default)
+velog post list
+
+# Machine-readable JSON
+velog --format compact post list
+
+# Silent mode (data on stdout, nothing on stderr)
+velog --format silent post create --title "Post" --file post.md --publish
+```
+
 ## Commands
 
 | Command | Description |
@@ -138,6 +159,24 @@ brew install velog-cli
 
 # Cargo
 cargo install velog-cli
+```
+
+### 출력 형식
+
+`--format` 옵션으로 출력 스타일을 선택할 수 있습니다:
+
+| 형식 | 설명 | 용도 |
+|------|------|------|
+| `pretty` | 테이블, 색상, 마크다운 렌더링 (기본값) | 터미널에서 직접 사용 |
+| `compact` | 압축 JSON | AI 에이전트, 스크립트, 파이프라인 |
+| `silent` | 쿼리는 JSON, 뮤테이션은 출력 없음 | CI/CD, 종료 코드만 필요한 경우 |
+
+```bash
+# 사람이 읽기 쉬운 형태 (기본값)
+velog post list
+
+# 기계 판독용 JSON
+velog --format compact post list
 ```
 
 ### 사용법

@@ -111,7 +111,8 @@ pub fn delete_credentials() -> Result<()> {
 
 /// Validate that a token is a velog.io JWT with the expected `sub` claim.
 /// Does NOT verify the signature — only checks `iss` and `sub` in the payload.
-pub fn validate_velog_jwt(token: &str, expected_sub: &str) -> Result<()> {
+/// Returns warning messages (e.g., token expiry) — caller decides how to render.
+pub fn validate_velog_jwt(token: &str, expected_sub: &str) -> Result<Vec<String>> {
     let parts: Vec<&str> = token.splitn(3, '.').collect();
     if parts.len() != 3 {
         bail!("Invalid token format (not a JWT)");
@@ -130,24 +131,25 @@ pub fn validate_velog_jwt(token: &str, expected_sub: &str) -> Result<()> {
         );
     }
     // exp 만료 검증 (경고만 — refresh로 복구 가능)
+    let mut warnings = Vec::new();
     if let Some(exp) = claims["exp"].as_u64() {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
         if exp < now {
-            eprintln!(
+            warnings.push(format!(
                 "Warning: {} token is expired. It will be refreshed automatically.",
                 expected_sub
-            );
+            ));
         } else if exp < now + 300 {
-            eprintln!(
+            warnings.push(format!(
                 "Warning: {} token expires in less than 5 minutes.",
                 expected_sub
-            );
+            ));
         }
     }
-    Ok(())
+    Ok(warnings)
 }
 
 #[cfg(test)]
@@ -209,14 +211,16 @@ mod tests {
     }
 
     #[test]
-    fn validate_jwt_expired_still_ok_with_warning() {
-        // exp 만료는 경고만 출력, 에러 아님
+    fn validate_jwt_expired_returns_warning() {
+        // exp 만료는 경고 반환, 에러 아님
         let claims = serde_json::json!({
             "iss": "velog.io",
             "sub": "access_token",
             "exp": 1000000000u64,
         });
-        assert!(validate_velog_jwt(&make_jwt(&claims), "access_token").is_ok());
+        let warnings = validate_velog_jwt(&make_jwt(&claims), "access_token").unwrap();
+        assert!(!warnings.is_empty());
+        assert!(warnings[0].contains("expired"));
     }
 
     #[test]

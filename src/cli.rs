@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use std::path::PathBuf;
 
@@ -6,9 +6,25 @@ use std::path::PathBuf;
 // They must only be collected via rpassword's hidden prompt.
 // Do NOT add #[arg(env = "...")] to any token-related fields.
 
+/// Output format: pretty (human-friendly, default), compact (JSON), silent (minimal)
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Format {
+    /// Machine-readable minified JSON (optimized for AI agents and pipelines)
+    Compact,
+    /// Human-friendly output with tables, colors, and markdown rendering (default)
+    #[default]
+    Pretty,
+    /// Minimal output: queries emit JSON, mutations emit nothing (exit code only)
+    Silent,
+}
+
 #[derive(Parser)]
 #[command(name = "velog", about = "CLI client for velog.io", version)]
 pub struct Cli {
+    /// Output format
+    #[arg(long, global = true, value_enum, default_value_t = Format::Pretty)]
+    pub format: Format,
+
     #[command(subcommand)]
     pub command: Commands,
 }
