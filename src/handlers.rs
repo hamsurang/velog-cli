@@ -259,11 +259,7 @@ async fn post_list_trending(
     emit_public_posts(&posts, format, PagingHint::Offset(next_offset))
 }
 
-async fn post_list_recent(
-    limit: u32,
-    cursor: Option<&str>,
-    format: Format,
-) -> anyhow::Result<()> {
+async fn post_list_recent(limit: u32, cursor: Option<&str>, format: Format) -> anyhow::Result<()> {
     let client = VelogClient::anonymous()?;
     let posts = client.get_recent_posts(limit, cursor).await?;
     emit_public_posts(&posts, format, PagingHint::Cursor)
@@ -565,7 +561,11 @@ pub async fn post_publish(slug: &str, format: Format) -> anyhow::Result<()> {
 
 fn date_or_dash(post: &Post) -> String {
     let d = post.date_short();
-    if d.is_empty() { "-".to_string() } else { d }
+    if d.is_empty() {
+        "-".to_string()
+    } else {
+        d
+    }
 }
 
 fn print_posts_table(posts: &[Post]) {

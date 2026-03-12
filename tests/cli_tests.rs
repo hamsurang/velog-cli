@@ -305,7 +305,11 @@ fn period_accepts_all_values() {
             .output()
             .unwrap();
         // --help always succeeds, confirming the flag was accepted
-        assert!(output.status.success(), "period={} should be accepted", period);
+        assert!(
+            output.status.success(),
+            "period={} should be accepted",
+            period
+        );
     }
 }
 
