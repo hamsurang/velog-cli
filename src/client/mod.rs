@@ -10,6 +10,7 @@ use crate::models::{
     CurrentUserData, GraphQLRequest, GraphQLResponse, RestoreTokenData,
 };
 
+mod comment;
 mod post;
 mod search;
 mod series;

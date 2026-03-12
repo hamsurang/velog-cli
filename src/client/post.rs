@@ -137,6 +137,24 @@ impl VelogClient {
         Ok((post, creds))
     }
 
+    /// 포스트 단건 조회 (anonymous, Shape B — 댓글/통계에서 slug→ID 변환용)
+    pub async fn get_post_anonymous(
+        &self,
+        username: &str,
+        url_slug: &str,
+    ) -> anyhow::Result<crate::models::Post> {
+        let vars = serde_json::json!({
+            "username": username,
+            "url_slug": url_slug,
+        });
+        let resp: GraphQLResponse<PostData> = self
+            .raw_graphql(API_V2, GET_POST_QUERY, Some(&vars))
+            .await?;
+        resp.into_result()?
+            .post
+            .ok_or_else(|| anyhow::anyhow!("Post not found: {}", url_slug))
+    }
+
     pub async fn write_post(
         &mut self,
         input: WritePostInput,

@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser};
 use velog_cli::auth;
-use velog_cli::cli::{AuthCommands, Cli, Commands, Format, PostCommands, SeriesCommands, TagCommands};
+use velog_cli::cli::{AuthCommands, Cli, CommentCommands, Commands, Format, PostCommands, SeriesCommands, TagCommands};
 use velog_cli::handlers;
 use velog_cli::output;
 
@@ -48,6 +48,41 @@ async fn main() {
                 handlers::post_list_by_tag(&tag, username.as_deref(), limit, cursor.as_deref(), format)
                     .await
             }
+        },
+        Commands::Comment { command } => match command {
+            CommentCommands::List {
+                post_slug,
+                username,
+                limit,
+            } => handlers::comment_list(&post_slug, username.as_deref(), limit, format).await,
+            CommentCommands::Write {
+                post_slug,
+                text,
+                file,
+            } => handlers::comment_write(&post_slug, text.as_deref(), file.as_deref(), format).await,
+            CommentCommands::Reply {
+                post_slug,
+                number,
+                text,
+                file,
+            } => {
+                handlers::comment_reply(&post_slug, &number, text.as_deref(), file.as_deref(), format)
+                    .await
+            }
+            CommentCommands::Edit {
+                post_slug,
+                number,
+                text,
+                file,
+            } => {
+                handlers::comment_edit(&post_slug, &number, text.as_deref(), file.as_deref(), format)
+                    .await
+            }
+            CommentCommands::Delete {
+                post_slug,
+                number,
+                yes,
+            } => handlers::comment_delete(&post_slug, &number, yes, format).await,
         },
         Commands::Stats { slug } => handlers::stats(&slug, format).await,
         Commands::Series { command } => match command {

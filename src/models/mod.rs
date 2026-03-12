@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+mod comment;
 mod post;
 mod search;
 mod series;
 mod stats;
 mod tag;
+pub use comment::*;
 pub use post::*;
 pub use search::*;
 pub use series::*;

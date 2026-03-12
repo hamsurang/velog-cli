@@ -60,6 +60,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: TagCommands,
     },
+    /// Comment commands
+    Comment {
+        #[command(subcommand)]
+        command: CommentCommands,
+    },
     /// View post statistics (views)
     Stats {
         /// Post URL slug
@@ -179,6 +184,65 @@ pub enum SeriesCommands {
     Delete {
         /// Series URL slug
         slug: String,
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CommentCommands {
+    /// List comments on a post
+    List {
+        /// Post URL slug
+        post_slug: String,
+        /// Username (defaults to logged-in user)
+        #[arg(short, long)]
+        username: Option<String>,
+        /// Maximum number of comments to show
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=500))]
+        limit: u32,
+    },
+    /// Write a comment on a post
+    Write {
+        /// Post URL slug
+        post_slug: String,
+        /// Comment text (or use --file)
+        text: Option<String>,
+        /// Read comment from file (use "-" for stdin)
+        #[arg(short, long, conflicts_with = "text")]
+        file: Option<PathBuf>,
+    },
+    /// Reply to a comment
+    Reply {
+        /// Post URL slug
+        post_slug: String,
+        /// Comment number to reply to (e.g. "1", "1.2")
+        number: String,
+        /// Reply text (or use --file)
+        text: Option<String>,
+        /// Read reply from file (use "-" for stdin)
+        #[arg(short, long, conflicts_with = "text")]
+        file: Option<PathBuf>,
+    },
+    /// Edit a comment
+    Edit {
+        /// Post URL slug
+        post_slug: String,
+        /// Comment number to edit (e.g. "1", "1.2")
+        number: String,
+        /// New text (or use --file)
+        text: Option<String>,
+        /// Read new text from file (use "-" for stdin)
+        #[arg(short, long, conflicts_with = "text")]
+        file: Option<PathBuf>,
+    },
+    /// Delete a comment
+    Delete {
+        /// Post URL slug
+        post_slug: String,
+        /// Comment number to delete (e.g. "1", "1.2")
+        number: String,
         /// Skip confirmation prompt
         #[arg(short, long)]
         yes: bool,
