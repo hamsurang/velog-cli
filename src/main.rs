@@ -24,7 +24,29 @@ async fn main() {
             AuthCommands::Logout => handlers::auth_logout(format),
         },
         Commands::Post { command } => match command {
-            PostCommands::List { drafts } => handlers::post_list(drafts, format).await,
+            PostCommands::List {
+                drafts,
+                trending,
+                recent,
+                username,
+                limit,
+                period,
+                cursor,
+                offset,
+            } => {
+                handlers::post_list(
+                    drafts,
+                    trending,
+                    recent,
+                    username.as_deref(),
+                    limit,
+                    period,
+                    cursor.as_deref(),
+                    offset,
+                    format,
+                )
+                .await
+            }
             PostCommands::Show { slug, username } => {
                 handlers::post_show(&slug, username.as_deref(), format).await
             }
