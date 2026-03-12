@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser};
 use velog_cli::auth;
-use velog_cli::cli::{AuthCommands, Cli, Commands, Format, PostCommands, TagCommands};
+use velog_cli::cli::{AuthCommands, Cli, Commands, Format, PostCommands, SeriesCommands, TagCommands};
 use velog_cli::handlers;
 use velog_cli::output;
 
@@ -47,6 +47,23 @@ async fn main() {
             } => {
                 handlers::post_list_by_tag(&tag, username.as_deref(), limit, cursor.as_deref(), format)
                     .await
+            }
+        },
+        Commands::Series { command } => match command {
+            SeriesCommands::List { username } => {
+                handlers::series_list(username.as_deref(), format).await
+            }
+            SeriesCommands::Show { slug, username } => {
+                handlers::series_show(&slug, username.as_deref(), format).await
+            }
+            SeriesCommands::Create { name, slug } => {
+                handlers::series_create(&name, slug.as_deref(), format).await
+            }
+            SeriesCommands::Edit { slug, name, order } => {
+                handlers::series_edit(&slug, name.as_deref(), order.as_deref(), format).await
+            }
+            SeriesCommands::Delete { slug, yes } => {
+                handlers::series_delete(&slug, yes, format).await
             }
         },
         Commands::Post { command } => match command {

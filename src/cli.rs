@@ -60,6 +60,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: TagCommands,
     },
+    /// Series management commands
+    Series {
+        #[command(subcommand)]
+        command: SeriesCommands,
+    },
     /// Generate shell completions
     Completions {
         /// Shell type (bash, zsh, fish, elvish, powershell)
@@ -127,6 +132,51 @@ pub enum TagCommands {
         /// Cursor for pagination
         #[arg(long)]
         cursor: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SeriesCommands {
+    /// List series for a user
+    List {
+        /// Username (defaults to logged-in user)
+        #[arg(short, long)]
+        username: Option<String>,
+    },
+    /// Show series detail with post list
+    Show {
+        /// Series URL slug
+        slug: String,
+        /// Username (defaults to logged-in user)
+        #[arg(short, long)]
+        username: Option<String>,
+    },
+    /// Create a new series
+    Create {
+        /// Series name
+        name: String,
+        /// Custom URL slug (auto-generated from name if omitted)
+        #[arg(long)]
+        slug: Option<String>,
+    },
+    /// Edit a series (name or post order)
+    Edit {
+        /// Series URL slug
+        slug: String,
+        /// New series name
+        #[arg(long)]
+        name: Option<String>,
+        /// Reorder posts by comma-separated post slugs
+        #[arg(long)]
+        order: Option<String>,
+    },
+    /// Delete a series (posts are NOT deleted)
+    Delete {
+        /// Series URL slug
+        slug: String,
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        yes: bool,
     },
 }
 
