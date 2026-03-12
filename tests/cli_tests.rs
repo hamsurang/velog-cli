@@ -230,3 +230,109 @@ fn compact_post_show_nonexistent_error_is_json() {
     }
     // If it somehow succeeds (unlikely), that's also fine — the format flag was accepted
 }
+
+// ---- Mutual exclusion tests (post list flags) ----
+
+#[test]
+fn conflicting_flags_trending_recent() {
+    velog_cmd()
+        .args(["post", "list", "--trending", "--recent"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn conflicting_flags_trending_drafts() {
+    velog_cmd()
+        .args(["post", "list", "--trending", "--drafts"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn conflicting_flags_username_recent() {
+    velog_cmd()
+        .args(["post", "list", "-u", "teo", "--recent"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn conflicting_flags_username_trending() {
+    velog_cmd()
+        .args(["post", "list", "-u", "teo", "--trending"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn conflicting_flags_username_drafts() {
+    velog_cmd()
+        .args(["post", "list", "-u", "teo", "--drafts"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn period_requires_trending() {
+    velog_cmd()
+        .args(["post", "list", "--period", "week"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--trending"));
+}
+
+#[test]
+fn offset_requires_trending() {
+    velog_cmd()
+        .args(["post", "list", "--offset", "10"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--trending"));
+}
+
+#[test]
+fn period_accepts_all_values() {
+    for period in &["day", "week", "month", "year"] {
+        // Should parse successfully (will fail at API level, not at clap level)
+        let output = velog_cmd()
+            .args(["post", "list", "--trending", "--period", period, "--help"])
+            .output()
+            .unwrap();
+        // --help always succeeds, confirming the flag was accepted
+        assert!(
+            output.status.success(),
+            "period={} should be accepted",
+            period
+        );
+    }
+}
+
+#[test]
+fn period_rejects_invalid_value() {
+    velog_cmd()
+        .args(["post", "list", "--trending", "--period", "hourly"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value"));
+}
+
+#[test]
+fn list_help_shows_new_flags() {
+    velog_cmd()
+        .args(["post", "list", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--trending"))
+        .stdout(predicate::str::contains("--recent"))
+        .stdout(predicate::str::contains("--username"))
+        .stdout(predicate::str::contains("--limit"))
+        .stdout(predicate::str::contains("--cursor"))
+        .stdout(predicate::str::contains("--offset"))
+        .stdout(predicate::str::contains("--period"));
+}

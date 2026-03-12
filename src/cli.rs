@@ -58,13 +58,54 @@ pub enum AuthCommands {
     Logout,
 }
 
+/// Time period for trending posts
+#[derive(ValueEnum, Clone, Copy, Debug)]
+pub enum Period {
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+impl std::fmt::Display for Period {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Period::Day => write!(f, "day"),
+            Period::Week => write!(f, "week"),
+            Period::Month => write!(f, "month"),
+            Period::Year => write!(f, "year"),
+        }
+    }
+}
+
 #[derive(Subcommand)]
 pub enum PostCommands {
-    /// List your posts
+    /// List posts (yours, trending, recent, or by user)
     List {
         /// Show draft (temporary) posts instead of published
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["trending", "recent", "username"])]
         drafts: bool,
+        /// Show trending posts
+        #[arg(long, conflicts_with_all = ["drafts", "recent", "username"])]
+        trending: bool,
+        /// Show recent posts
+        #[arg(long, conflicts_with_all = ["drafts", "trending", "username"])]
+        recent: bool,
+        /// Show posts by a specific user
+        #[arg(short, long, conflicts_with_all = ["drafts", "trending", "recent"])]
+        username: Option<String>,
+        /// Maximum number of posts to show (1–100)
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+        /// Time period for trending (day, week, month, year)
+        #[arg(long, value_enum, requires = "trending")]
+        period: Option<Period>,
+        /// Cursor for pagination (recent, user posts)
+        #[arg(long, conflicts_with_all = ["trending", "drafts"])]
+        cursor: Option<String>,
+        /// Offset for pagination (trending only)
+        #[arg(long, requires = "trending")]
+        offset: Option<u32>,
     },
     /// Show a specific post by slug
     Show {

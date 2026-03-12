@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::auth::Credentials;
 use crate::models::{
     CurrentUserData, EditPostData, GraphQLRequest, GraphQLResponse, PostData, PostsData,
-    RemovePostData, RestoreTokenData, WritePostData,
+    RecentPostsData, RemovePostData, RestoreTokenData, TrendingPostsData, WritePostData,
 };
 use crate::models::{EditPostInput, WritePostInput};
 
@@ -75,6 +75,40 @@ const EDIT_POST_MUTATION: &str = r#"
             url_slug: $url_slug, thumbnail: $thumbnail, meta: $meta, series_id: $series_id
         ) {
             id url_slug
+        }
+    }
+"#;
+
+// v3 API: trending posts (anonymous, offset-based pagination)
+const GET_TRENDING_POSTS_QUERY: &str = r#"
+    query ($limit: Int, $offset: Int, $timeframe: String) {
+        trendingPosts(input: { limit: $limit, offset: $offset, timeframe: $timeframe }) {
+            id title short_description thumbnail
+            likes url_slug released_at updated_at tags
+            user { username }
+        }
+    }
+"#;
+
+// v3 API: recent posts (anonymous, cursor-based pagination)
+const GET_RECENT_POSTS_QUERY: &str = r#"
+    query ($limit: Int, $cursor: ID) {
+        recentPosts(input: { limit: $limit, cursor: $cursor }) {
+            id title short_description thumbnail
+            likes url_slug released_at updated_at tags
+            user { username }
+        }
+    }
+"#;
+
+// v2 API: user posts with limit/cursor (anonymous)
+const GET_USER_POSTS_QUERY: &str = r#"
+    query Posts($username: String!, $limit: Int, $cursor: ID) {
+        posts(username: $username, limit: $limit, cursor: $cursor) {
+            id title short_description thumbnail
+            likes is_private is_temp url_slug
+            released_at updated_at tags
+            user { username }
         }
     }
 "#;
@@ -259,6 +293,58 @@ impl VelogClient {
             .execute_graphql(API_V2, EDIT_POST_MUTATION, Some(vars))
             .await?;
         Ok((data.edit_post, creds))
+    }
+
+    /// 트렌딩 포스트 (anonymous, v3 API, offset-based)
+    pub async fn get_trending_posts(
+        &self,
+        limit: u32,
+        offset: u32,
+        timeframe: &str,
+    ) -> anyhow::Result<Vec<crate::models::Post>> {
+        let vars = serde_json::json!({
+            "limit": limit,
+            "offset": offset,
+            "timeframe": timeframe,
+        });
+        let resp: GraphQLResponse<TrendingPostsData> = self
+            .raw_graphql(API_V3, GET_TRENDING_POSTS_QUERY, Some(&vars))
+            .await?;
+        Ok(resp.into_result()?.trending_posts)
+    }
+
+    /// 최신 포스트 (anonymous, v3 API, cursor-based)
+    pub async fn get_recent_posts(
+        &self,
+        limit: u32,
+        cursor: Option<&str>,
+    ) -> anyhow::Result<Vec<crate::models::Post>> {
+        let vars = serde_json::json!({
+            "limit": limit,
+            "cursor": cursor,
+        });
+        let resp: GraphQLResponse<RecentPostsData> = self
+            .raw_graphql(API_V3, GET_RECENT_POSTS_QUERY, Some(&vars))
+            .await?;
+        Ok(resp.into_result()?.recent_posts)
+    }
+
+    /// 특정 유저의 포스트 (anonymous 가능, v2 API, cursor-based)
+    pub async fn get_user_posts(
+        &self,
+        username: &str,
+        limit: u32,
+        cursor: Option<&str>,
+    ) -> anyhow::Result<Vec<crate::models::Post>> {
+        let vars = serde_json::json!({
+            "username": username,
+            "limit": limit,
+            "cursor": cursor,
+        });
+        let resp: GraphQLResponse<PostsData> = self
+            .raw_graphql(API_V2, GET_USER_POSTS_QUERY, Some(&vars))
+            .await?;
+        Ok(resp.into_result()?.posts)
     }
 
     pub async fn remove_post(&mut self, id: &str) -> anyhow::Result<(bool, Option<Credentials>)> {

@@ -68,7 +68,9 @@ pub struct Post {
     pub body: Option<String>,
     pub thumbnail: Option<String>,
     pub likes: i32,
+    #[serde(default)]
     pub is_private: bool,
+    #[serde(default)]
     pub is_temp: bool,
     pub url_slug: String,
     pub released_at: Option<String>,
@@ -199,6 +201,18 @@ pub struct RemovePostData {
     pub remove_post: bool,
 }
 
+#[derive(Deserialize)]
+pub struct TrendingPostsData {
+    #[serde(rename = "trendingPosts")]
+    pub trending_posts: Vec<Post>,
+}
+
+#[derive(Deserialize)]
+pub struct RecentPostsData {
+    #[serde(rename = "recentPosts")]
+    pub recent_posts: Vec<Post>,
+}
+
 // ---- Compact Output Types ----
 // Used by --format compact/silent for token-optimized JSON output.
 
@@ -223,6 +237,8 @@ pub struct CompactPost {
     pub date: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
 }
 
 /// Compact auth status for `auth status`
@@ -274,6 +290,7 @@ impl From<&Post> for CompactPost {
             tags: post.tags.clone().unwrap_or_default(),
             date: post.date_short(),
             body: None,
+            user: post.user.as_ref().map(|u| u.username.clone()),
         }
     }
 }
@@ -288,6 +305,7 @@ impl CompactPost {
             tags: post.tags.clone().unwrap_or_default(),
             date: post.date_short(),
             body: Some(post.body.clone().unwrap_or_default()),
+            user: post.user.as_ref().map(|u| u.username.clone()),
         }
     }
 }
@@ -584,5 +602,77 @@ mod tests {
         };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains(r#""url":"https://velog.io/@user/test""#));
+    }
+
+    // ---- New response wrapper deserialization tests ----
+
+    #[test]
+    fn trending_posts_data_deserializes() {
+        let json = r#"{
+            "trendingPosts": [
+                {
+                    "id": "t1", "title": "Trending", "likes": 42,
+                    "url_slug": "trending-post",
+                    "released_at": "2026-03-10T00:00:00.000Z",
+                    "updated_at": null, "tags": ["rust"],
+                    "user": { "username": "author1" }
+                }
+            ]
+        }"#;
+        let data: TrendingPostsData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.trending_posts.len(), 1);
+        assert_eq!(data.trending_posts[0].title, "Trending");
+        assert_eq!(data.trending_posts[0].likes, 42);
+    }
+
+    #[test]
+    fn recent_posts_data_deserializes() {
+        let json = r#"{
+            "recentPosts": [
+                {
+                    "id": "r1", "title": "Recent", "likes": 5,
+                    "url_slug": "recent-post",
+                    "released_at": null, "updated_at": "2026-03-11T00:00:00.000Z",
+                    "tags": [], "user": { "username": "author2" }
+                }
+            ]
+        }"#;
+        let data: RecentPostsData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.recent_posts.len(), 1);
+        assert_eq!(data.recent_posts[0].title, "Recent");
+    }
+
+    #[test]
+    fn post_serde_default_missing_is_temp_and_is_private() {
+        // v3 API responses omit is_temp and is_private; serde(default) should handle this
+        let json = r#"{
+            "id": "p1", "title": "No Flags", "likes": 0,
+            "url_slug": "no-flags",
+            "released_at": null, "updated_at": null, "tags": null
+        }"#;
+        let post: Post = serde_json::from_str(json).unwrap();
+        assert!(!post.is_temp);
+        assert!(!post.is_private);
+    }
+
+    #[test]
+    fn compact_post_includes_user_when_present() {
+        let mut post = make_test_post(false, false);
+        post.user = Some(PostUser {
+            username: "teo".to_string(),
+        });
+        let compact = CompactPost::from(&post);
+        assert_eq!(compact.user.as_deref(), Some("teo"));
+        let json = serde_json::to_string(&compact).unwrap();
+        assert!(json.contains(r#""user":"teo""#));
+    }
+
+    #[test]
+    fn compact_post_omits_user_when_none() {
+        let post = make_test_post(false, false);
+        let compact = CompactPost::from(&post);
+        assert!(compact.user.is_none());
+        let json = serde_json::to_string(&compact).unwrap();
+        assert!(!json.contains("user"));
     }
 }
