@@ -3,10 +3,12 @@ use serde::{Deserialize, Serialize};
 mod post;
 mod search;
 mod series;
+mod stats;
 mod tag;
 pub use post::*;
 pub use search::*;
 pub use series::*;
+pub use stats::*;
 pub use tag::*;
 
 // ---- GraphQL Envelope ----

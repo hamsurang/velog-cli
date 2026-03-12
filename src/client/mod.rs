@@ -13,6 +13,7 @@ use crate::models::{
 mod post;
 mod search;
 mod series;
+mod stats;
 mod tag;
 
 pub(crate) const API_V3: &str = "https://v3.velog.io/graphql";

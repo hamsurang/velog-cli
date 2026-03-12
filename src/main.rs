@@ -49,6 +49,7 @@ async fn main() {
                     .await
             }
         },
+        Commands::Stats { slug } => handlers::stats(&slug, format).await,
         Commands::Series { command } => match command {
             SeriesCommands::List { username } => {
                 handlers::series_list(username.as_deref(), format).await

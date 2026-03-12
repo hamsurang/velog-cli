@@ -60,6 +60,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: TagCommands,
     },
+    /// View post statistics (views)
+    Stats {
+        /// Post URL slug
+        slug: String,
+    },
     /// Series management commands
     Series {
         #[command(subcommand)]
