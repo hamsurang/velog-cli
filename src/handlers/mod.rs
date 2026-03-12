@@ -6,9 +6,13 @@ use crate::client::VelogClient;
 
 mod auth_handlers;
 mod post;
+mod search;
+mod tag;
 
 pub use auth_handlers::*;
 pub use post::*;
+pub use search::*;
+pub use tag::*;
 
 // ---- Helper functions ----
 

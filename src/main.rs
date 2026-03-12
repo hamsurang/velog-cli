@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser};
 use velog_cli::auth;
-use velog_cli::cli::{AuthCommands, Cli, Commands, Format, PostCommands};
+use velog_cli::cli::{AuthCommands, Cli, Commands, Format, PostCommands, TagCommands};
 use velog_cli::handlers;
 use velog_cli::output;
 
@@ -23,29 +23,61 @@ async fn main() {
             AuthCommands::Status => handlers::auth_status(format).await,
             AuthCommands::Logout => handlers::auth_logout(format),
         },
+        Commands::Search {
+            keyword,
+            username,
+            limit,
+            offset,
+        } => handlers::search(&keyword, username.as_deref(), limit, offset, format).await,
+        Commands::Tags { command } => match command {
+            TagCommands::List {
+                sort,
+                username,
+                limit,
+                cursor,
+            } => {
+                handlers::tags_list(&sort, username.as_deref(), limit, cursor.as_deref(), format)
+                    .await
+            }
+            TagCommands::Posts {
+                tag,
+                username,
+                limit,
+                cursor,
+            } => {
+                handlers::post_list_by_tag(&tag, username.as_deref(), limit, cursor.as_deref(), format)
+                    .await
+            }
+        },
         Commands::Post { command } => match command {
             PostCommands::List {
                 drafts,
                 trending,
                 recent,
                 username,
+                tag,
                 limit,
                 period,
                 cursor,
                 offset,
             } => {
-                handlers::post_list(
-                    drafts,
-                    trending,
-                    recent,
-                    username.as_deref(),
-                    limit,
-                    period,
-                    cursor.as_deref(),
-                    offset,
-                    format,
-                )
-                .await
+                if let Some(t) = tag.as_deref() {
+                    handlers::post_list_by_tag(t, username.as_deref(), limit, cursor.as_deref(), format)
+                        .await
+                } else {
+                    handlers::post_list(
+                        drafts,
+                        trending,
+                        recent,
+                        username.as_deref(),
+                        limit,
+                        period,
+                        cursor.as_deref(),
+                        offset,
+                        format,
+                    )
+                    .await
+                }
             }
             PostCommands::Show { slug, username } => {
                 handlers::post_show(&slug, username.as_deref(), format).await

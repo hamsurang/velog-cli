@@ -41,6 +41,25 @@ pub enum Commands {
         #[command(subcommand)]
         command: PostCommands,
     },
+    /// Search posts
+    Search {
+        /// Search keyword
+        keyword: String,
+        /// Filter by username
+        #[arg(short, long)]
+        username: Option<String>,
+        /// Maximum number of results (1–100)
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+        /// Offset for pagination
+        #[arg(long, default_value_t = 0)]
+        offset: u32,
+    },
+    /// Tag commands
+    Tags {
+        #[command(subcommand)]
+        command: TagCommands,
+    },
     /// Generate shell completions
     Completions {
         /// Shell type (bash, zsh, fish, elvish, powershell)
@@ -79,6 +98,39 @@ impl std::fmt::Display for Period {
 }
 
 #[derive(Subcommand)]
+pub enum TagCommands {
+    /// List tags (global or by user)
+    List {
+        /// Sort order (trending, alphabetical)
+        #[arg(long, default_value = "trending")]
+        sort: String,
+        /// Filter tags by username
+        #[arg(short, long)]
+        username: Option<String>,
+        /// Maximum number of tags (1–100)
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+        /// Cursor for pagination
+        #[arg(long)]
+        cursor: Option<String>,
+    },
+    /// List posts with a specific tag
+    Posts {
+        /// Tag name
+        tag: String,
+        /// Filter by username
+        #[arg(short, long)]
+        username: Option<String>,
+        /// Maximum number of posts (1–100)
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+        /// Cursor for pagination
+        #[arg(long)]
+        cursor: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 pub enum PostCommands {
     /// List posts (yours, trending, recent, or by user)
     List {
@@ -94,6 +146,9 @@ pub enum PostCommands {
         /// Show posts by a specific user
         #[arg(short, long, conflicts_with_all = ["drafts", "trending", "recent"])]
         username: Option<String>,
+        /// Filter by tag name
+        #[arg(long, conflicts_with_all = ["drafts", "trending", "recent"])]
+        tag: Option<String>,
         /// Maximum number of posts to show (1–100)
         #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
         limit: u32,

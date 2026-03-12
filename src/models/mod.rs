@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 mod post;
+mod search;
+mod tag;
 pub use post::*;
+pub use search::*;
+pub use tag::*;
 
 // ---- GraphQL Envelope ----
 #[derive(Serialize)]
