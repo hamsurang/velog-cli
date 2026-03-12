@@ -36,11 +36,15 @@ velog auth login
 # Paste refresh_token (hidden)
 ```
 
-### 2. List your posts
+### 2. Browse posts
 
 ```bash
-velog post list
-velog post list --drafts
+velog post list                          # Your posts (auth required)
+velog post list --drafts                 # Your drafts
+velog post list --trending               # Trending posts
+velog post list --trending --period week # Trending this week
+velog post list --recent                 # Latest posts
+velog post list -u <username>            # A user's posts
 ```
 
 ### 3. Create a post
@@ -83,13 +87,27 @@ velog --format silent post create --title "Post" --file post.md --publish
 | `velog auth login` | Authenticate with velog.io tokens |
 | `velog auth status` | Show current login status |
 | `velog auth logout` | Remove stored credentials |
-| `velog post list` | List your posts (`--drafts` for drafts) |
+| `velog post list` | List posts (yours, trending, recent, or by user) |
 | `velog post show <slug>` | Show a post (`-u <user>` for others' posts) |
 | `velog post create` | Create a new post from markdown |
 | `velog post edit <slug>` | Edit an existing post |
 | `velog post delete <slug>` | Delete a post (`-y` to skip confirmation) |
 | `velog post publish <slug>` | Publish a draft post |
 | `velog completions <shell>` | Generate shell completions (bash/zsh/fish) |
+
+### Post List Options
+
+```
+velog post list                        # Your published posts (auth required)
+velog post list --drafts               # Your draft posts (auth required)
+velog post list --trending             # Trending posts (no auth)
+velog post list --trending --period week  # Trending by period (day/week/month/year)
+velog post list --recent               # Latest posts (no auth)
+velog post list -u <username>          # A user's posts (no auth)
+velog post list --limit 10             # Limit results (default: 20)
+velog post list --trending --offset 20 # Offset pagination (trending only)
+velog post list --recent --cursor <id> # Cursor pagination (recent/user)
+```
 
 ### Post Create Options
 
@@ -186,7 +204,12 @@ velog --format compact post list
 velog auth login
 
 # 2. 글 목록 확인
-velog post list
+velog post list                          # 내 글 목록
+velog post list --drafts                 # 임시 글 목록
+velog post list --trending               # 트렌딩
+velog post list --trending --period week # 이번 주 트렌딩
+velog post list --recent                 # 최신 글
+velog post list -u <username>            # 특정 유저의 글
 
 # 3. 새 글 작성
 velog post create --title "제목" --file post.md --tags "태그1,태그2" --publish
