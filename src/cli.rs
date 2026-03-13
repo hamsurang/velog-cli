@@ -325,13 +325,13 @@ Examples:
         #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
         limit: u32,
         /// Time period for trending (day, week, month, year)
-        #[arg(long, value_enum, requires = "trending")]
+        #[arg(long, value_enum, requires = "trending", conflicts_with_all = ["recent", "username", "drafts"])]
         period: Option<Period>,
         /// Cursor for pagination (recent, user posts)
         #[arg(long, conflicts_with_all = ["trending", "drafts"])]
         cursor: Option<String>,
         /// Offset for pagination (trending only)
-        #[arg(long, requires = "trending")]
+        #[arg(long, requires = "trending", conflicts_with_all = ["recent", "username", "drafts"])]
         offset: Option<u32>,
     },
     /// Show a specific post by slug

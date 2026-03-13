@@ -22,7 +22,7 @@ impl std::fmt::Debug for Credentials {
     }
 }
 
-/// 인증 필요 에러 마커 (exit code 2)
+/// 인증 필요 에러 마커 (exit code 1)
 pub struct AuthError;
 
 impl std::fmt::Display for AuthError {

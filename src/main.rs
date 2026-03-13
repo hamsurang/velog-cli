@@ -269,10 +269,12 @@ fn detect_format_from_raw_args() -> Format {
 }
 
 /// .context() 래핑 후에도 AuthError를 찾으려면 chain() 순회 필요
+/// POSIX/GNU 관례: 0=성공, 1=일반 에러, 2=사용법 에러(clap)
+/// AuthError는 런타임 조건 에러이므로 exit code 1 사용.
 fn exit_code(err: &anyhow::Error) -> i32 {
     for cause in err.chain() {
         if cause.downcast_ref::<auth::AuthError>().is_some() {
-            return 2;
+            return 1;
         }
     }
     1

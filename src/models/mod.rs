@@ -179,11 +179,11 @@ mod tests {
     fn compact_error_serializes() {
         let err = CompactError {
             error: "Not authenticated".to_string(),
-            exit_code: 2,
+            exit_code: 1,
         };
         let json = serde_json::to_string(&err).unwrap();
         assert!(json.contains(r#""error":"Not authenticated""#));
-        assert!(json.contains(r#""exit_code":2"#));
+        assert!(json.contains(r#""exit_code":1"#));
     }
 
     #[test]
