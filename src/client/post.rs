@@ -1,29 +1,13 @@
-use std::time::Duration;
-
-use anyhow::Context as _;
-use reqwest::header::{HeaderValue, COOKIE};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-
 use crate::auth::Credentials;
 use crate::models::{
-    CurrentUserData, EditPostData, GraphQLRequest, GraphQLResponse, PostData, PostsData,
-    RecentPostsData, RemovePostData, RestoreTokenData, TrendingPostsData, WritePostData,
+    EditPostData, EditPostInput, GraphQLResponse, PostData, PostsData, RecentPostsData,
+    RemovePostData, TrendingPostsData, WritePostData, WritePostInput,
 };
-use crate::models::{EditPostInput, WritePostInput};
 
-const CURRENT_USER_QUERY: &str = r#"{ currentUser { id username email } }"#;
-
-const RESTORE_TOKEN_QUERY: &str = r#"{ restoreToken { accessToken refreshToken } }"#;
+use super::{VelogClient, API_V2, API_V3};
 
 // NOTE: velog GraphQL API는 snake_case 필드명을 사용합니다.
 // Rust 모델도 snake_case를 그대로 사용하므로 별도 serde rename이 불필요합니다.
-//
-// velog API 엔드포인트:
-//   v3: 인증 쿼리 (currentUser, restoreToken)
-//   v2: 콘텐츠 쿼리/뮤테이션 (posts, post, writePost, editPost, removePost)
-const API_V3: &str = "https://v3.velog.io/graphql";
-const API_V2: &str = "https://v2.velog.io/graphql";
 
 const GET_POSTS_QUERY: &str = r#"
     query Posts($username: String!, $temp_only: Boolean) {
@@ -119,127 +103,7 @@ const REMOVE_POST_MUTATION: &str = r#"
     }
 "#;
 
-pub struct VelogClient {
-    http: reqwest::Client,
-    credentials: Option<Credentials>,
-}
-
 impl VelogClient {
-    /// 인증된 클라이언트 (CRUD + 토큰 갱신)
-    pub fn new(credentials: Credentials) -> anyhow::Result<Self> {
-        Ok(Self {
-            http: Self::build_http()?,
-            credentials: Some(credentials),
-        })
-    }
-
-    /// 미인증 클라이언트 (public 쿼리 전용)
-    pub fn anonymous() -> anyhow::Result<Self> {
-        Ok(Self {
-            http: Self::build_http()?,
-            credentials: None,
-        })
-    }
-
-    fn build_http() -> anyhow::Result<reqwest::Client> {
-        reqwest::Client::builder()
-            .https_only(true)
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .user_agent(concat!("velog-cli/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(Into::into)
-    }
-
-    /// raw_graphql: 단순 HTTP 요청 → GraphQLResponse 그대로 반환 (into_result 미호출)
-    async fn raw_graphql<V: Serialize, T: DeserializeOwned>(
-        &self,
-        url: &str,
-        query: &'static str,
-        variables: Option<&V>,
-    ) -> anyhow::Result<GraphQLResponse<T>> {
-        let mut req = self
-            .http
-            .post(url)
-            .json(&GraphQLRequest { query, variables });
-
-        if let Some(creds) = &self.credentials {
-            let mut cookie = HeaderValue::from_str(&format!(
-                "access_token={}; refresh_token={}",
-                creds.access_token, creds.refresh_token
-            ))
-            .context("Token contains invalid characters for HTTP header")?;
-            cookie.set_sensitive(true);
-            req = req.header(COOKIE, cookie);
-        }
-
-        let resp = req.send().await?;
-        let status = resp.status();
-        let body = resp.text().await?;
-        if body.is_empty() || !status.is_success() {
-            let preview: String = body.chars().take(200).collect();
-            anyhow::bail!("API error: status={}, body={}", status, preview);
-        }
-        let parsed: GraphQLResponse<T> = serde_json::from_str(&body).with_context(|| {
-            let preview: String = body.chars().take(200).collect();
-            format!("Failed to parse response: {}", preview)
-        })?;
-        Ok(parsed)
-    }
-
-    /// execute_graphql: raw_graphql + 인증 에러 시 1회 갱신 재시도
-    pub async fn execute_graphql<V, T>(
-        &mut self,
-        url: &str,
-        query: &'static str,
-        variables: Option<V>,
-    ) -> anyhow::Result<(T, Option<Credentials>)>
-    where
-        V: Serialize,
-        T: DeserializeOwned,
-    {
-        let resp: GraphQLResponse<T> = self.raw_graphql(url, query, variables.as_ref()).await?;
-
-        // data가 없고 인증 에러인 경우에만 재시도
-        if resp.data.is_none() && resp.is_auth_error() && self.credentials.is_some() {
-            let mut new_creds = self.restore_token().await.map_err(|e| {
-                anyhow::Error::new(crate::auth::AuthError).context(format!(
-                    "Token refresh failed: {e:#}. Run `velog auth login` again."
-                ))
-            })?;
-            // 기존 credentials의 cached username 보존
-            new_creds.username = self.credentials.as_ref().and_then(|c| c.username.clone());
-            self.credentials = Some(new_creds.clone());
-            let retry_resp: GraphQLResponse<T> =
-                self.raw_graphql(url, query, variables.as_ref()).await?;
-            let data = retry_resp.into_result()?;
-            return Ok((data, Some(new_creds)));
-        }
-
-        let data = resp.into_result()?;
-        Ok((data, None))
-    }
-
-    /// 토큰 갱신 (execute_graphql 미경유 — 무한 루프 방지)
-    async fn restore_token(&self) -> anyhow::Result<Credentials> {
-        let resp: GraphQLResponse<RestoreTokenData> = self
-            .raw_graphql(API_V3, RESTORE_TOKEN_QUERY, None::<&()>)
-            .await?;
-        let data = resp.into_result()?;
-        Ok(data.restore_token.into())
-    }
-
-    // ---- Public API methods ----
-
-    pub async fn current_user(
-        &mut self,
-    ) -> anyhow::Result<(crate::models::User, Option<Credentials>)> {
-        let (data, creds): (CurrentUserData, _) = self
-            .execute_graphql(API_V3, CURRENT_USER_QUERY, None::<()>)
-            .await?;
-        Ok((data.current_user, creds))
-    }
-
     pub async fn get_posts(
         &mut self,
         username: &str,
@@ -271,6 +135,24 @@ impl VelogClient {
             .post
             .ok_or_else(|| anyhow::anyhow!("Post not found: {}", url_slug))?;
         Ok((post, creds))
+    }
+
+    /// 포스트 단건 조회 (anonymous, Shape B — 댓글/통계에서 slug→ID 변환용)
+    pub async fn get_post_anonymous(
+        &self,
+        username: &str,
+        url_slug: &str,
+    ) -> anyhow::Result<crate::models::Post> {
+        let vars = serde_json::json!({
+            "username": username,
+            "url_slug": url_slug,
+        });
+        let resp: GraphQLResponse<PostData> = self
+            .raw_graphql(API_V2, GET_POST_QUERY, Some(&vars))
+            .await?;
+        resp.into_result()?
+            .post
+            .ok_or_else(|| anyhow::anyhow!("Post not found: {}", url_slug))
     }
 
     pub async fn write_post(
