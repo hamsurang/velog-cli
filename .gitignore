@@ -5,3 +5,4 @@ credentials.json
 .omc/
 .ux-test-results/
 cli-ux-test-workspace/
+.superset
