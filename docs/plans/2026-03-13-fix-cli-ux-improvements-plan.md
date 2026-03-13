@@ -12,13 +12,15 @@ deepened: 2026-03-13
 
 **Deepened on:** 2026-03-13
 **Technical review:** 2026-03-13 (Architecture, Simplicity, Security — 3 reviewers)
-**Sections enhanced:** 4 (Phase 0–3, originally 5 phases merged to 4)
-**Research conducted:** GraphQL introspection, clap try_parse patterns, validation ordering, repo conventions
+**Sections enhanced:** 6 (Phase 0–5, originally 5 phases merged to 4, then 2 new phases added)
+**Research conducted:** GraphQL introspection, clap try_parse patterns, validation ordering, repo conventions, clap requires+conflicts_with interaction, exit code conventions
 
 ### Key Improvements from Research
 1. **Phase 0 — API 스키마 확정:** `searchPosts`가 `SearchResult { count: Int!, posts: [Post!]! }`를 반환함을 introspection으로 확인.
 2. **Phase 2 — validate_slug 호환성 위험 발견:** 기존 `validate_slug()`는 ASCII만 허용하지만 velog slug에 한글이 포함될 수 있음. `validate_slug_nonempty()` 사용 권장.
 3. **Phase 1 — `e.render()` 안전성:** `e.use_stderr()`로 충분함을 확인.
+4. **Phase 4 — clap `requires` + `conflicts_with` 상호작용 버그 발견:** `--period`에 `requires = "trending"`이 있지만, `--recent --period day` 조합에서 clap이 requires 체크를 건너뜀 → `conflicts_with_all` 추가로 해결.
+5. **Phase 5 — exit code 관례 확인:** POSIX/GNU 관례에서 exit 2는 "잘못된 사용법", exit 1은 "일반 에러". `AuthError`는 런타임 조건이므로 exit 1이 적절.
 
 ### Technical Review Findings (반영 완료)
 1. **[Security HIGH] Phase 1 false positive 수정:** `args.any(|a| a == "compact")` → `detect_format_from_raw_args()` 함수로 `--format` + 값 쌍만 스캔. `velog search "compact"` 같은 키워드가 매칭되는 버그 방지.
@@ -36,7 +38,7 @@ deepened: 2026-03-13
 
 ## Overview
 
-CLI UX E2E 테스트 (`.ux-test-results/report.md`)에서 발견된 1 Critical, 2 Fail, 4 Warning 이슈를 수정한다. search 명령어 복구, compact 모드 에러 포맷 통일, 유효성 검증 순서 정비, help 텍스트 개선을 포함한다.
+CLI UX E2E 테스트 (`.ux-test-results/report.md`)에서 발견된 2 Critical, 3 Fail, 5 Warning 이슈를 수정한다. search 명령어 복구, compact 모드 에러 포맷 통일, 유효성 검증 순서 정비, help 텍스트 개선, **플래그 조용한 실패 방지, 인증 에러 exit code 분리**를 포함한다.
 
 ## Problem Statement / Motivation
 
@@ -47,7 +49,7 @@ CLI UX E2E 테스트 (`.ux-test-results/report.md`)에서 발견된 1 Critical, 
 
 ## Proposed Solution
 
-4개 Phase로 나누어 순차적으로 수정한다. 각 Phase는 독립적이며 개별 커밋 가능. (Phase 0→1→2 순서 권장: compact 에러 래핑이 validation 에러에도 적용되도록)
+6개 Phase로 나누어 순차적으로 수정한다. 각 Phase는 독립적이며 개별 커밋 가능. (Phase 0→1→2 순서 권장: compact 에러 래핑이 validation 에러에도 적용되도록. Phase 4, 5는 독립적으로 진행 가능)
 
 ## Technical Approach
 
@@ -430,6 +432,169 @@ Reply { ... }
 - [ ] `velog comment reply --help` 출력에 번호 체계 + Examples 표시
 - [ ] 기존 `conflicts_with_all` 런타임 에러 동작 유지
 
+---
+
+### Phase 4: 플래그 조용한 실패 방지 [Critical — UX E2E 테스트에서 신규 발견]
+
+**파일:** `src/cli.rs`
+
+**현재 상태:** `--period`와 `--offset`에 `requires = "trending"`이 설정되어 있지만, `--recent`나 `--username`이 함께 사용되면 clap이 requires 체크를 건너뛰고 해당 플래그가 **에러 없이 무시**됨.
+
+**재현:**
+```bash
+$ velog post list --recent --period day
+# → exit 0, --period 완전히 무시. 사용자는 "오늘의 최근 글"을 받았다고 착각
+
+$ velog post list --username testuser --period day
+# → exit 0, --period 무시. "No posts found"가 period 때문인지 알 수 없음
+
+$ velog post list --recent --offset 10
+# → exit 0, --offset 무시. 페이지네이션이 동작하지 않는데 에러 없음
+```
+
+**Root Cause 분석:**
+clap의 `requires = "trending"` 제약은 "이 플래그가 있으면 `--trending`도 있어야 한다"를 의미한다. 하지만 `--recent`가 함께 있으면 `--trending`과 `--recent`의 `conflicts_with_all` 관계가 먼저 평가되어, `requires` 체크가 우회되는 것으로 보인다. 단독으로 `--period day`만 사용하면 requires 에러가 정상 발생하지만, conflicting 플래그가 함께 있으면 동작하지 않는다.
+
+**해결:** `conflicts_with_all`을 `--period`와 `--offset`에 명시적으로 추가하여, 지원하지 않는 모드에서 사용 시 clap이 에러를 생성하도록 한다.
+
+```rust
+// src/cli.rs — PostCommands::List 수정
+
+// 기존:
+#[arg(long, value_enum, requires = "trending")]
+period: Option<Period>,
+
+#[arg(long, requires = "trending")]
+offset: Option<u32>,
+
+// 변경:
+/// Time period for trending (day, week, month, year)
+#[arg(long, value_enum, requires = "trending", conflicts_with_all = ["recent", "username", "drafts"])]
+period: Option<Period>,
+
+/// Offset for pagination (trending only)
+#[arg(long, requires = "trending", conflicts_with_all = ["recent", "username", "drafts"])]
+offset: Option<u32>,
+```
+
+**기대 동작 (수정 후):**
+```bash
+$ velog post list --recent --period day
+error: the argument '--period <PERIOD>' cannot be used with '--recent'
+
+Usage: velog post list --trending --period <PERIOD>
+
+For more information, try '--help'.
+$ echo $?
+2
+
+$ velog post list --recent --offset 10
+error: the argument '--offset <OFFSET>' cannot be used with '--recent'
+$ echo $?
+2
+```
+
+**Edge Cases:**
+- `--period day` (단독): 기존 requires 에러 유지 ("--trending required") ✓
+- `--trending --period day`: 정상 동작 ✓
+- `--trending --offset 20`: 정상 동작 ✓
+- `--tag rust --period day`: 에러 — tag은 trending이 아님 (tag은 conflicts_with_all에 포함하지 않음. tag 모드에서 period가 의미 있을 수 있는지 검토 필요. 현재 API가 지원하지 않으므로 conflicts_with에 포함하지 않되, requires = "trending"이 방어)
+
+**검증:**
+- [ ] `velog post list --recent --period day` → exit 2, 에러 메시지 (조용한 실패 해소)
+- [ ] `velog post list --username test --period day` → exit 2, 에러 메시지
+- [ ] `velog post list --drafts --period day` → exit 2, 에러 메시지
+- [ ] `velog post list --recent --offset 10` → exit 2, 에러 메시지
+- [ ] `velog post list --trending --period day` → exit 0, 정상 동작 (기존 동작 유지)
+- [ ] `velog post list --period day` → exit 2, requires 에러 (기존 동작 유지)
+- [ ] `velog post list --trending --offset 20` → exit 0, 정상 동작
+
+---
+
+### Phase 5: 인증 에러 Exit Code 분리 [Fail — UX E2E 테스트에서 신규 발견]
+
+**파일:** `src/main.rs`, `src/models/mod.rs` (테스트)
+
+**현재 상태:** `exit_code()` 함수(main.rs:272)가 `AuthError`에 대해 exit code 2를 반환한다. clap 인자 에러도 exit code 2이므로, 스크립트에서 "사용법 에러"와 "인증 필요"를 구분할 수 없다.
+
+```rust
+// 현재 (main.rs:272-279)
+fn exit_code(err: &anyhow::Error) -> i32 {
+    for cause in err.chain() {
+        if cause.downcast_ref::<auth::AuthError>().is_some() {
+            return 2;  // ← 인증 에러도 2
+        }
+    }
+    1
+}
+```
+
+**해결:** `AuthError`의 exit code를 1로 변경한다.
+
+```rust
+// 수정 후
+fn exit_code(err: &anyhow::Error) -> i32 {
+    // AuthError는 런타임 조건 에러이므로 exit code 1 (일반 에러).
+    // exit code 2는 clap 인자 에러(잘못된 사용법)에만 사용.
+    // POSIX/GNU 관례: 0=성공, 1=일반 에러, 2=사용법 에러
+    for cause in err.chain() {
+        if cause.downcast_ref::<auth::AuthError>().is_some() {
+            return 1;
+        }
+    }
+    1
+}
+```
+
+**참고:** 수정 후 `exit_code()` 함수는 항상 1을 반환하게 되므로, AuthError 분기가 의미적 문서화 역할만 한다. 향후 다른 에러 유형에 대해 별도 exit code가 필요할 수 있으므로 함수 구조는 유지한다.
+
+**추가 수정 — `emit_error` 호출부:**
+
+`src/output.rs`의 `emit_error(format, msg, exit_code)` 호출에서 인증 에러에 exit_code 2를 하드코딩하는 곳이 있으면 1로 변경:
+
+```rust
+// src/models/mod.rs 테스트 수정 (line 181-186)
+// 기존:
+let err = ErrorResponse {
+    error: "Not authenticated".to_string(),
+    exit_code: 2,
+};
+assert!(json.contains(r#""exit_code":2"#));
+
+// 수정:
+let err = ErrorResponse {
+    error: "Not authenticated".to_string(),
+    exit_code: 1,
+};
+assert!(json.contains(r#""exit_code":1"#));
+```
+
+**기대 동작 (수정 후):**
+```bash
+$ velog post list          # 비로그인
+$ echo $?
+1   # 일반 에러 (인증 실패)
+
+$ velog post show          # 필수 인자 누락
+$ echo $?
+2   # 사용법 에러 (clap)
+
+# 스크립트에서 구분 가능:
+velog post list 2>/dev/null
+case $? in
+  0) echo "success" ;;
+  1) echo "runtime error (maybe auth)" ;;
+  2) echo "wrong usage" ;;
+esac
+```
+
+**검증:**
+- [ ] `velog post list` (비로그인) → exit code 1 (기존 2에서 변경)
+- [ ] `velog post list --format compact` (비로그인) → JSON에 `"exit_code":1`
+- [ ] `velog post show` (인자 누락) → exit code 2 (변경 없음)
+- [ ] `velog --format invalid` → exit code 2 (변경 없음)
+- [ ] 기존 테스트 업데이트 후 전부 통과
+
 ## Acceptance Criteria
 
 - [ ] `velog search "rust" --format compact` 정상 작동 (유효한 JSON, `total_count` 포함)
@@ -438,7 +603,10 @@ Reply { ... }
 - [ ] 한글 slug 포스트 접근이 거부되지 않음
 - [ ] `velog post list --help`에 상호 배타 플래그 문서 표시
 - [ ] 복잡한 명령어(post create, search)의 `--help`에 Examples 섹션 표시
-- [ ] 기존 146개 테스트 전부 통과
+- [ ] `velog post list --recent --period day` → exit 2, 에러 메시지 (조용한 실패 해소)
+- [ ] `velog post list --recent --offset 10` → exit 2, 에러 메시지 (조용한 실패 해소)
+- [ ] `velog post list` (비로그인) → exit code 1 (인증 에러와 사용법 에러 구분)
+- [ ] 기존 146개 테스트 전부 통과 (exit code 관련 테스트 업데이트 후)
 - [ ] `cargo clippy -- -D warnings` 경고 0개
 
 ## Success Metrics
@@ -455,6 +623,8 @@ Reply { ... }
 | ~~raw args "compact" false positive~~ | ~~JSON 오출력~~ | **해결됨:** `detect_format_from_raw_args()`로 `--format` + 값 쌍만 스캔 |
 | `validate_slug()` 한글 slug 거부 | 기존 포스트 접근 불가 | `validate_slug_nonempty()` 신규 함수 사용 (빈/whitespace만 차단) |
 | `count` 음수 시 `has_more` 오동작 | 무한 pagination | `count.max(0)` + `saturating_add`로 방어 |
+| clap `requires` + `conflicts_with` 상호작용 | `--period`/`--offset` 조용한 실패 | `conflicts_with_all` 명시적 추가로 방어 |
+| exit code 변경 시 기존 스크립트 영향 | AuthError exit 2→1 변경 | 하위 호환성 이슈 가능하나, 기존 exit 2가 관례에 맞지 않으므로 변경이 올바름 |
 
 ## Sources & References
 
@@ -464,3 +634,5 @@ Reply { ... }
 - CLI UX Principles: `.claude/references/cli-ux-principles.md` — §2 에러 포맷, §8 검증 순서
 - API Schema Verification: GraphQL introspection on `v2.velog.io/graphql` and `v3.velog.io/graphql` (2026-03-13)
 - Repo Research: `.omc/research/RESEARCH_SUMMARY.md` — conventions, error patterns, validation ordering
+- UX E2E Test (Phase 4-5 근거): `.ux-test-results/test-results.md` — [EDGE-08], [EDGE-09], [EDGE-11], [EXIT-04] 시나리오
+- CLI UX Principles §8: `.claude/references/cli-ux-principles.md` — 조용한 실패 방지, 검증 순서, exit code 관례
