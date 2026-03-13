@@ -4,12 +4,14 @@ mod comment;
 mod post;
 mod search;
 mod series;
+mod social;
 mod stats;
 mod tag;
 pub use comment::*;
 pub use post::*;
 pub use search::*;
 pub use series::*;
+pub use social::*;
 pub use stats::*;
 pub use tag::*;
 

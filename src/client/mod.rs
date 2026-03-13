@@ -14,6 +14,7 @@ mod comment;
 mod post;
 mod search;
 mod series;
+mod social;
 mod stats;
 mod tag;
 

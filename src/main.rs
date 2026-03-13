@@ -171,7 +171,22 @@ async fn main() {
             }
             PostCommands::Delete { slug, yes } => handlers::post_delete(&slug, yes, format).await,
             PostCommands::Publish { slug } => handlers::post_publish(&slug, format).await,
+            PostCommands::Like { slug, username } => {
+                handlers::post_like(&slug, username.as_deref(), format).await
+            }
+            PostCommands::Unlike { slug, username } => {
+                handlers::post_unlike(&slug, username.as_deref(), format).await
+            }
         },
+        Commands::Follow { username } => handlers::follow(&username, format).await,
+        Commands::Unfollow { username } => handlers::unfollow(&username, format).await,
+        Commands::ReadingList {
+            list_type,
+            limit,
+            cursor,
+        } => {
+            handlers::reading_list(&list_type.to_string(), limit, cursor.as_deref(), format).await
+        }
     };
 
     if let Err(e) = result {

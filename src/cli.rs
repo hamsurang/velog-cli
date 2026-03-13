@@ -75,6 +75,29 @@ pub enum Commands {
         #[command(subcommand)]
         command: SeriesCommands,
     },
+    /// Follow a user
+    Follow {
+        /// Username to follow
+        username: String,
+    },
+    /// Unfollow a user
+    Unfollow {
+        /// Username to unfollow
+        username: String,
+    },
+    /// View your reading list (liked/read posts)
+    #[command(name = "reading-list")]
+    ReadingList {
+        /// List type
+        #[arg(long, value_enum, default_value_t = ReadingListType::Liked)]
+        list_type: ReadingListType,
+        /// Maximum number of posts (1–100)
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+        /// Cursor for pagination
+        #[arg(long)]
+        cursor: Option<String>,
+    },
     /// Generate shell completions
     Completions {
         /// Shell type (bash, zsh, fish, elvish, powershell)
@@ -337,4 +360,39 @@ pub enum PostCommands {
         /// Post URL slug of the draft to publish
         slug: String,
     },
+    /// Like a post
+    Like {
+        /// Post URL slug
+        slug: String,
+        /// Post author username (defaults to logged-in user)
+        #[arg(short, long)]
+        username: Option<String>,
+    },
+    /// Unlike a post
+    Unlike {
+        /// Post URL slug
+        slug: String,
+        /// Post author username (defaults to logged-in user)
+        #[arg(short, long)]
+        username: Option<String>,
+    },
+}
+
+/// Reading list type
+#[derive(ValueEnum, Clone, Copy, Debug, Default)]
+pub enum ReadingListType {
+    /// Liked posts
+    #[default]
+    Liked,
+    /// Read posts
+    Read,
+}
+
+impl std::fmt::Display for ReadingListType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadingListType::Liked => write!(f, "LIKED"),
+            ReadingListType::Read => write!(f, "READ"),
+        }
+    }
 }
