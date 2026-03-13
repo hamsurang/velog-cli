@@ -7,8 +7,9 @@ use crate::client::VelogClient;
 use crate::models::{assign_comment_numbers, CompactComment, NumberedComment};
 use crate::output;
 
-use super::{maybe_save_creds, validate_username, with_auth_client};
-use super::series::confirm_destructive;
+use super::{
+    confirm_destructive, maybe_save_creds, resolve_client, validate_username, with_auth_client,
+};
 
 // ---- Comment handlers ----
 
@@ -19,14 +20,17 @@ pub async fn comment_list(
     limit: u32,
     format: Format,
 ) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(post_slug)?;
     if let Some(u) = username {
         validate_username(u)?;
     }
 
-    let (client, resolved_username) = resolve_comment_client(username).await?;
+    let (client, resolved_username) = resolve_client(username).await?;
 
     // slug → post ID (anonymous 조회)
-    let post = client.get_post_anonymous(&resolved_username, post_slug).await?;
+    let post = client
+        .get_post_anonymous(&resolved_username, post_slug)
+        .await?;
     let post_id = &post.id;
 
     let comments = client.get_comments(post_id).await?;
@@ -72,6 +76,7 @@ pub async fn comment_write(
     file: Option<&Path>,
     format: Format,
 ) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(post_slug)?;
     let content = read_comment_text(text, file)?;
     validate_comment_text(&content)?;
 
@@ -84,11 +89,7 @@ pub async fn comment_write(
 
     match format {
         Format::Pretty => {
-            eprintln!(
-                "{} Comment posted on '{}'.",
-                "✓".green(),
-                post_slug
-            );
+            eprintln!("{} Comment posted on '{}'.", "✓".green(), post_slug);
         }
         Format::Compact | Format::Silent => {
             let compact = serde_json::json!({
@@ -110,6 +111,7 @@ pub async fn comment_reply(
     file: Option<&Path>,
     format: Format,
 ) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(post_slug)?;
     let content = read_comment_text(text, file)?;
     validate_comment_text(&content)?;
 
@@ -151,6 +153,7 @@ pub async fn comment_edit(
     file: Option<&Path>,
     format: Format,
 ) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(post_slug)?;
     let content = read_comment_text(text, file)?;
     validate_comment_text(&content)?;
 
@@ -188,6 +191,7 @@ pub async fn comment_delete(
     yes: bool,
     format: Format,
 ) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(post_slug)?;
     let (mut client, username) = with_auth_client().await?;
     let (_post_id, comment_id) = resolve_comment_id(&username, post_slug, number).await?;
 
@@ -259,7 +263,7 @@ async fn resolve_comment_id(
 ) -> anyhow::Result<(String, String)> {
     let anon = VelogClient::anonymous()?;
     let post = anon.get_post_anonymous(username, post_slug).await?;
-    let post_id = post.id.clone();
+    let post_id = post.id;
 
     let comments = anon.get_comments(&post_id).await?;
     let numbered = assign_comment_numbers(&comments);
@@ -279,18 +283,6 @@ async fn resolve_comment_id(
     Ok((post_id, found.id.clone()))
 }
 
-/// username이 있으면 anonymous, 없으면 인증 클라이언트
-async fn resolve_comment_client(
-    username: Option<&str>,
-) -> anyhow::Result<(VelogClient, String)> {
-    if let Some(u) = username {
-        let client = VelogClient::anonymous()?;
-        Ok((client, u.to_string()))
-    } else {
-        with_auth_client().await
-    }
-}
-
 fn read_comment_text(text: Option<&str>, file: Option<&Path>) -> anyhow::Result<String> {
     use std::io::{IsTerminal, Read};
     match (text, file) {
@@ -302,10 +294,7 @@ fn read_comment_text(text: Option<&str>, file: Option<&Path>) -> anyhow::Result<
         }
         (None, Some(p)) => {
             let meta = std::fs::metadata(p)?;
-            anyhow::ensure!(
-                meta.len() <= 1_048_576,
-                "Comment file too large (max 1MB)"
-            );
+            anyhow::ensure!(meta.len() <= 1_048_576, "Comment file too large (max 1MB)");
             std::fs::read_to_string(p)
                 .map_err(|e| anyhow::anyhow!("Cannot read file '{}': {}", p.display(), e))
         }
@@ -315,18 +304,13 @@ fn read_comment_text(text: Option<&str>, file: Option<&Path>) -> anyhow::Result<
             Ok(buf)
         }
         (None, None) => {
-            anyhow::bail!(
-                "No comment text provided. Use positional text, --file, or pipe stdin."
-            )
+            anyhow::bail!("No comment text provided. Use positional text, --file, or pipe stdin.")
         }
     }
 }
 
 fn validate_comment_text(text: &str) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        !text.trim().is_empty(),
-        "Comment text cannot be empty"
-    );
+    anyhow::ensure!(!text.trim().is_empty(), "Comment text cannot be empty");
     Ok(())
 }
 

@@ -85,6 +85,17 @@ pub(crate) fn validate_slug(s: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 읽기 전용 slug 유효성 검증 (한국어 slug 허용, 비어있거나 공백 포함만 거부)
+pub(crate) fn validate_slug_nonempty(s: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(!s.is_empty(), "Slug cannot be empty");
+    anyhow::ensure!(
+        !s.chars().any(|c| c.is_whitespace()),
+        "Slug cannot contain whitespace"
+    );
+    anyhow::ensure!(s.len() <= 255, "Slug too long (max 255 chars)");
+    Ok(())
+}
+
 pub(crate) fn validate_username(u: &str) -> anyhow::Result<()> {
     anyhow::ensure!(!u.is_empty(), "Username cannot be empty");
     anyhow::ensure!(u.len() <= 64, "Username too long (max 64 chars)");
@@ -94,6 +105,33 @@ pub(crate) fn validate_username(u: &str) -> anyhow::Result<()> {
         "Invalid username: only alphanumeric, hyphens, and underscores allowed"
     );
     Ok(())
+}
+
+/// 확인 프롬프트 (destructive 작업용)
+pub(crate) fn confirm_destructive(message: &str, yes_flag: bool) -> anyhow::Result<bool> {
+    use std::io::IsTerminal;
+    if yes_flag {
+        return Ok(true);
+    }
+    if !std::io::stdin().is_terminal() {
+        anyhow::bail!("Cannot confirm in non-interactive mode. Use -y to skip confirmation.");
+    }
+    eprint!("{} [y/N] ", message);
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    Ok(input.trim().eq_ignore_ascii_case("y"))
+}
+
+/// username이 지정되면 anonymous 클라이언트, 아니면 인증 클라이언트에서 username 획득
+pub(crate) async fn resolve_client(
+    username: Option<&str>,
+) -> anyhow::Result<(VelogClient, String)> {
+    if let Some(u) = username {
+        let client = VelogClient::anonymous()?;
+        Ok((client, u.to_string()))
+    } else {
+        with_auth_client().await
+    }
 }
 
 pub(crate) fn validate_cursor(c: &str) -> anyhow::Result<()> {
@@ -210,5 +248,32 @@ mod tests {
         assert!(validate_slug("my_post").is_err());
         assert!(validate_slug("my post").is_err());
         assert!(validate_slug("my.post").is_err());
+    }
+
+    // ---- validate_slug_nonempty tests ----
+
+    #[test]
+    fn validate_slug_nonempty_valid() {
+        assert!(validate_slug_nonempty("my-post").is_ok());
+        assert!(validate_slug_nonempty("2020년-상반기-회고").is_ok());
+        assert!(validate_slug_nonempty("My_Post.v2").is_ok());
+    }
+
+    #[test]
+    fn validate_slug_nonempty_empty() {
+        assert!(validate_slug_nonempty("").is_err());
+    }
+
+    #[test]
+    fn validate_slug_nonempty_whitespace() {
+        assert!(validate_slug_nonempty("my post").is_err());
+        assert!(validate_slug_nonempty("my\tpost").is_err());
+    }
+
+    #[test]
+    fn validate_slug_nonempty_too_long() {
+        let long = "a".repeat(256);
+        assert!(validate_slug_nonempty(&long).is_err());
+        assert!(validate_slug_nonempty(&"a".repeat(255)).is_ok());
     }
 }

@@ -1,25 +1,21 @@
 use colored::Colorize;
 
 use crate::cli::Format;
-use crate::client::VelogClient;
 use crate::output;
 
-use super::{maybe_save_creds, validate_username, with_auth_client};
 use super::post::{emit_public_posts, PagingHint};
+use super::{maybe_save_creds, validate_username, with_auth_client};
 
 // ---- Like / Unlike ----
 
-pub async fn post_like(
-    slug: &str,
-    username: Option<&str>,
-    format: Format,
-) -> anyhow::Result<()> {
-    let (mut client, my_username) = with_auth_client().await?;
-
-    let target_username = username.unwrap_or(&my_username);
+pub async fn post_like(slug: &str, username: Option<&str>, format: Format) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(slug)?;
     if let Some(u) = username {
         validate_username(u)?;
     }
+
+    let (mut client, my_username) = with_auth_client().await?;
+    let target_username = username.unwrap_or(&my_username);
 
     let (post, creds1) = client.get_post(target_username, slug).await?;
     maybe_save_creds(creds1)?;
@@ -48,17 +44,14 @@ pub async fn post_like(
     Ok(())
 }
 
-pub async fn post_unlike(
-    slug: &str,
-    username: Option<&str>,
-    format: Format,
-) -> anyhow::Result<()> {
-    let (mut client, my_username) = with_auth_client().await?;
-
-    let target_username = username.unwrap_or(&my_username);
+pub async fn post_unlike(slug: &str, username: Option<&str>, format: Format) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(slug)?;
     if let Some(u) = username {
         validate_username(u)?;
     }
+
+    let (mut client, my_username) = with_auth_client().await?;
+    let target_username = username.unwrap_or(&my_username);
 
     let (post, creds1) = client.get_post(target_username, slug).await?;
     maybe_save_creds(creds1)?;
@@ -93,9 +86,7 @@ pub async fn follow(username: &str, format: Format) -> anyhow::Result<()> {
     validate_username(username)?;
 
     let (mut client, _my_username) = with_auth_client().await?;
-
-    let anon = VelogClient::anonymous()?;
-    let user = anon.get_user(username).await?;
+    let user = client.get_user(username).await?;
 
     let (_ok, creds) = client.follow_user(&user.id).await?;
     maybe_save_creds(creds)?;
@@ -119,9 +110,7 @@ pub async fn unfollow(username: &str, format: Format) -> anyhow::Result<()> {
     validate_username(username)?;
 
     let (mut client, _my_username) = with_auth_client().await?;
-
-    let anon = VelogClient::anonymous()?;
-    let user = anon.get_user(username).await?;
+    let user = client.get_user(username).await?;
 
     let (_ok, creds) = client.unfollow_user(&user.id).await?;
     maybe_save_creds(creds)?;

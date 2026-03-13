@@ -51,10 +51,7 @@ const REMOVE_COMMENT_MUTATION: &str = r#"
 
 impl VelogClient {
     /// 댓글 목록 조회 (anonymous, v2 API)
-    pub async fn get_comments(
-        &self,
-        post_id: &str,
-    ) -> anyhow::Result<Vec<Comment>> {
+    pub async fn get_comments(&self, post_id: &str) -> anyhow::Result<Vec<Comment>> {
         let vars = serde_json::json!({ "post_id": post_id });
         let resp: GraphQLResponse<CommentsData> = self
             .raw_graphql(API_V2, GET_COMMENTS_QUERY, Some(&vars))

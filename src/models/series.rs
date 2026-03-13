@@ -190,8 +190,16 @@ mod tests {
             created_at: None,
             updated_at: None,
             series_posts: Some(vec![
-                SeriesPost { id: Some("sp1".into()), post: None, index: Some(1) },
-                SeriesPost { id: Some("sp2".into()), post: None, index: Some(2) },
+                SeriesPost {
+                    id: Some("sp1".into()),
+                    post: None,
+                    index: Some(1),
+                },
+                SeriesPost {
+                    id: Some("sp2".into()),
+                    post: None,
+                    index: Some(2),
+                },
             ]),
         };
         let compact = CompactSeries::from(&s);

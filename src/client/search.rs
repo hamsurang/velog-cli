@@ -1,13 +1,16 @@
-use crate::models::{GraphQLResponse, SearchPostsData};
+use crate::models::{GraphQLResponse, SearchPostsData, SearchResult};
 
 use super::{VelogClient, API_V2};
 
 const SEARCH_POSTS_QUERY: &str = r#"
     query ($keyword: String!, $offset: Int, $limit: Int, $username: String) {
         searchPosts(keyword: $keyword, offset: $offset, limit: $limit, username: $username) {
-            id title short_description thumbnail
-            likes url_slug released_at updated_at tags
-            user { username }
+            count
+            posts {
+                id title short_description thumbnail
+                likes url_slug released_at updated_at tags
+                user { username }
+            }
         }
     }
 "#;
@@ -20,7 +23,7 @@ impl VelogClient {
         offset: u32,
         limit: u32,
         username: Option<&str>,
-    ) -> anyhow::Result<Vec<crate::models::Post>> {
+    ) -> anyhow::Result<SearchResult> {
         let vars = serde_json::json!({
             "keyword": keyword,
             "offset": offset,

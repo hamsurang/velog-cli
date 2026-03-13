@@ -23,26 +23,36 @@ pub async fn search(
     }
 
     let client = VelogClient::anonymous()?;
-    let posts = client.search_posts(keyword, offset, limit, username).await?;
+    let result = client
+        .search_posts(keyword, offset, limit, username)
+        .await?;
+    let posts = &result.posts;
+    let total = result.count.max(0) as u32;
+    let consumed = offset.saturating_add(posts.len() as u32);
+    let has_more = consumed < total;
 
     match format {
         Format::Pretty => {
             if posts.is_empty() {
-                eprintln!("{}", format!("No results found for '{}'.", keyword).yellow());
+                eprintln!(
+                    "{}",
+                    format!("No results found for '{}'.", keyword).yellow()
+                );
                 return Ok(());
             }
-            print_search_results(&posts, keyword);
-            let next_offset = offset + posts.len() as u32;
-            eprintln!("Next page: --offset {}", next_offset);
+            print_search_results(posts, keyword);
+            if has_more {
+                eprintln!("Showing {consumed} of {total} results. Next page: --offset {consumed}");
+            }
         }
         Format::Compact | Format::Silent => {
             let compact: Vec<CompactSearchResult> =
                 posts.iter().map(CompactSearchResult::from).collect();
-            let next_offset = offset + posts.len() as u32;
             let output_val = serde_json::json!({
                 "results": compact,
-                "next_offset": next_offset,
-                "has_more": posts.len() as u32 == limit,
+                "total_count": total,
+                "next_offset": consumed,
+                "has_more": has_more,
             });
             output::emit_data(format, &output_val);
         }
@@ -95,7 +105,11 @@ fn print_search_results(posts: &[Post], keyword: &str) {
             .unwrap_or("-");
         let tags = post.tags.as_ref().map(|t| t.join(", ")).unwrap_or_default();
         let date = post.date_short();
-        let date = if date.is_empty() { "-".to_string() } else { date };
+        let date = if date.is_empty() {
+            "-".to_string()
+        } else {
+            date
+        };
 
         table.add_row(vec![&title, author, &post.url_slug, &tags, &date]);
     }

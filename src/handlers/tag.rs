@@ -6,8 +6,8 @@ use crate::client::VelogClient;
 use crate::models::CompactTag;
 use crate::output;
 
-use super::{validate_cursor, validate_username};
 use super::post::{emit_public_posts, PagingHint};
+use super::{validate_cursor, validate_username};
 
 // ---- Tag handlers ----
 
@@ -48,8 +48,7 @@ pub async fn tags_list(
                 println!("{table}");
             }
             Format::Compact | Format::Silent => {
-                let compact: Vec<CompactTag> =
-                    user_tags.iter().map(CompactTag::from).collect();
+                let compact: Vec<CompactTag> = user_tags.iter().map(CompactTag::from).collect();
                 output::emit_data(format, &compact);
             }
         }
@@ -68,7 +67,10 @@ pub async fn tags_list(
                     .set_header(vec!["Tag", "Posts"]);
                 for tag in &tags {
                     let name = tag.name.as_deref().unwrap_or("-");
-                    let count = tag.posts_count.map(|c| c.to_string()).unwrap_or_else(|| "-".to_string());
+                    let count = tag
+                        .posts_count
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "-".to_string());
                     table.add_row(vec![name, &count]);
                 }
                 println!("{table}");
@@ -109,7 +111,9 @@ pub async fn post_list_by_tag(
     }
 
     let client = VelogClient::anonymous()?;
-    let posts = client.get_posts_by_tag(tag, username, limit, cursor).await?;
+    let posts = client
+        .get_posts_by_tag(tag, username, limit, cursor)
+        .await?;
     emit_public_posts(&posts, format, PagingHint::Cursor)
 }
 

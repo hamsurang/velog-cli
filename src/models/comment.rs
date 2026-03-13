@@ -156,7 +156,9 @@ mod tests {
         Comment {
             id: Some(id.to_string()),
             text: Some(text.to_string()),
-            user: Some(CommentUser { username: user.to_string() }),
+            user: Some(CommentUser {
+                username: user.to_string(),
+            }),
             created_at: Some("2026-03-13T00:00:00.000Z".to_string()),
             updated_at: None,
             level: Some(0),
@@ -205,9 +207,12 @@ mod tests {
             "user1",
             Some(vec![
                 make_comment("c2", "reply1", "user2", None),
-                make_comment("c3", "reply2", "user3", Some(vec![
-                    make_comment("c4", "nested", "user4", None),
-                ])),
+                make_comment(
+                    "c3",
+                    "reply2",
+                    "user3",
+                    Some(vec![make_comment("c4", "nested", "user4", None)]),
+                ),
             ]),
         )];
         let result = assign_comment_numbers(&comments);

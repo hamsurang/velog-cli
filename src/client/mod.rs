@@ -6,9 +6,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::auth::Credentials;
-use crate::models::{
-    CurrentUserData, GraphQLRequest, GraphQLResponse, RestoreTokenData,
-};
+use crate::models::{CurrentUserData, GraphQLRequest, GraphQLResponse, RestoreTokenData};
 
 mod comment;
 mod post;
@@ -86,12 +84,10 @@ impl VelogClient {
             let preview: String = String::from_utf8_lossy(&body).chars().take(200).collect();
             anyhow::bail!("API error: status={}, body={}", status, preview);
         }
-        let parsed: GraphQLResponse<T> =
-            serde_json::from_slice(&body).with_context(|| {
-                let preview: String =
-                    String::from_utf8_lossy(&body).chars().take(200).collect();
-                format!("Failed to parse response: {}", preview)
-            })?;
+        let parsed: GraphQLResponse<T> = serde_json::from_slice(&body).with_context(|| {
+            let preview: String = String::from_utf8_lossy(&body).chars().take(200).collect();
+            format!("Failed to parse response: {}", preview)
+        })?;
         Ok(parsed)
     }
 

@@ -145,6 +145,10 @@ pub(crate) fn emit_public_posts(
 }
 
 pub async fn post_show(slug: &str, username: Option<&str>, format: Format) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(slug)?;
+    if let Some(u) = username {
+        super::validate_username(u)?;
+    }
     let (post, new_creds) = if let Some(uname) = username {
         let mut client = match auth::load_credentials()? {
             Some(c) => VelogClient::new(c)?,
@@ -249,6 +253,7 @@ pub async fn post_edit(
     tags: Option<&str>,
     format: Format,
 ) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(slug)?;
     anyhow::ensure!(
         file.is_some() || title.is_some() || tags.is_some(),
         "Nothing to edit. Provide --file, --title, or --tags."
@@ -286,6 +291,7 @@ pub async fn post_edit(
 }
 
 pub async fn post_delete(slug: &str, yes: bool, format: Format) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(slug)?;
     let (mut client, username) = with_auth_client().await?;
     let (post, new_creds) = client.get_post(&username, slug).await?;
     maybe_save_creds(new_creds)?;
@@ -325,6 +331,7 @@ pub async fn post_delete(slug: &str, yes: bool, format: Format) -> anyhow::Resul
 }
 
 pub async fn post_publish(slug: &str, format: Format) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(slug)?;
     let (mut client, username) = with_auth_client().await?;
     let (existing, new_creds) = client.get_post(&username, slug).await?;
     maybe_save_creds(new_creds)?;

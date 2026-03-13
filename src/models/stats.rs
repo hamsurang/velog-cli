@@ -95,9 +95,18 @@ mod tests {
         let stats = Stats {
             total: 100,
             count_by_day: vec![
-                DayCount { count: 10, day: "2026-03-13T00:00:00.000Z".into() },
-                DayCount { count: 8, day: "2026-03-12T00:00:00.000Z".into() },
-                DayCount { count: 5, day: "2026-03-11T00:00:00.000Z".into() },
+                DayCount {
+                    count: 10,
+                    day: "2026-03-13T00:00:00.000Z".into(),
+                },
+                DayCount {
+                    count: 8,
+                    day: "2026-03-12T00:00:00.000Z".into(),
+                },
+                DayCount {
+                    count: 5,
+                    day: "2026-03-11T00:00:00.000Z".into(),
+                },
             ],
         };
         let compact = CompactStats::from_stats(&stats, "2026-03-13", "2026-03-12");
@@ -112,9 +121,10 @@ mod tests {
     fn compact_stats_missing_today() {
         let stats = Stats {
             total: 50,
-            count_by_day: vec![
-                DayCount { count: 3, day: "2026-03-11T00:00:00.000Z".into() },
-            ],
+            count_by_day: vec![DayCount {
+                count: 3,
+                day: "2026-03-11T00:00:00.000Z".into(),
+            }],
         };
         let compact = CompactStats::from_stats(&stats, "2026-03-13", "2026-03-12");
         assert_eq!(compact.today, 0);
@@ -127,7 +137,10 @@ mod tests {
             total: 100,
             today: 10,
             yesterday: 8,
-            daily: vec![CompactDayCount { date: "2026-03-13".into(), views: 10 }],
+            daily: vec![CompactDayCount {
+                date: "2026-03-13".into(),
+                views: 10,
+            }],
         };
         let json = serde_json::to_string(&cs).unwrap();
         assert!(json.contains(r#""total":100"#));

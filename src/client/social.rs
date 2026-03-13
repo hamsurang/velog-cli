@@ -1,7 +1,7 @@
 use crate::auth::Credentials;
 use crate::models::{
-    FollowData, GraphQLResponse, LikePostData, Post, ReadingListData, UnfollowData,
-    UnlikePostData, User,
+    FollowData, GraphQLResponse, LikePostData, Post, ReadingListData, UnfollowData, UnlikePostData,
+    User,
 };
 
 use super::{VelogClient, API_V2, API_V3};
@@ -61,10 +61,7 @@ struct UserData {
 
 impl VelogClient {
     /// 좋아요 (authenticated, v2 API)
-    pub async fn like_post(
-        &mut self,
-        id: &str,
-    ) -> anyhow::Result<(Post, Option<Credentials>)> {
+    pub async fn like_post(&mut self, id: &str) -> anyhow::Result<(Post, Option<Credentials>)> {
         let vars = serde_json::json!({ "id": id });
         let (data, creds): (LikePostData, _) = self
             .execute_graphql(API_V2, LIKE_POST_MUTATION, Some(vars))
@@ -73,10 +70,7 @@ impl VelogClient {
     }
 
     /// 좋아요 취소 (authenticated, v2 API)
-    pub async fn unlike_post(
-        &mut self,
-        id: &str,
-    ) -> anyhow::Result<(Post, Option<Credentials>)> {
+    pub async fn unlike_post(&mut self, id: &str) -> anyhow::Result<(Post, Option<Credentials>)> {
         let vars = serde_json::json!({ "id": id });
         let (data, creds): (UnlikePostData, _) = self
             .execute_graphql(API_V2, UNLIKE_POST_MUTATION, Some(vars))
@@ -85,10 +79,7 @@ impl VelogClient {
     }
 
     /// 유저 정보 조회 (anonymous, v3 API)
-    pub async fn get_user(
-        &self,
-        username: &str,
-    ) -> anyhow::Result<User> {
+    pub async fn get_user(&self, username: &str) -> anyhow::Result<User> {
         let vars = serde_json::json!({ "username": username });
         let resp: GraphQLResponse<UserData> = self
             .raw_graphql(API_V3, GET_USER_QUERY, Some(&vars))

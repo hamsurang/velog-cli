@@ -1,7 +1,7 @@
 use crate::auth::Credentials;
 use crate::models::{
-    AppendToSeriesData, CreateSeriesData, EditSeriesData, GraphQLResponse,
-    RemoveSeriesData, Series, SeriesData, SeriesListData,
+    AppendToSeriesData, CreateSeriesData, EditSeriesData, GraphQLResponse, RemoveSeriesData,
+    Series, SeriesData, SeriesListData,
 };
 
 use super::{VelogClient, API_V2};
@@ -65,10 +65,7 @@ const REMOVE_SERIES_MUTATION: &str = r#"
 
 impl VelogClient {
     /// 시리즈 목록 (anonymous, v2 API)
-    pub async fn get_series_list(
-        &self,
-        username: &str,
-    ) -> anyhow::Result<Vec<Series>> {
+    pub async fn get_series_list(&self, username: &str) -> anyhow::Result<Vec<Series>> {
         let vars = serde_json::json!({ "username": username });
         let resp: GraphQLResponse<SeriesListData> = self
             .raw_graphql(API_V2, GET_SERIES_LIST_QUERY, Some(&vars))
@@ -77,11 +74,7 @@ impl VelogClient {
     }
 
     /// 시리즈 상세 (anonymous, v2 API)
-    pub async fn get_series(
-        &self,
-        username: &str,
-        url_slug: &str,
-    ) -> anyhow::Result<Series> {
+    pub async fn get_series(&self, username: &str, url_slug: &str) -> anyhow::Result<Series> {
         let vars = serde_json::json!({
             "username": username,
             "url_slug": url_slug,
@@ -143,10 +136,7 @@ impl VelogClient {
     }
 
     /// 시리즈 삭제 (authenticated, v2 API)
-    pub async fn remove_series(
-        &mut self,
-        id: &str,
-    ) -> anyhow::Result<(bool, Option<Credentials>)> {
+    pub async fn remove_series(&mut self, id: &str) -> anyhow::Result<(bool, Option<Credentials>)> {
         let vars = serde_json::json!({ "id": id });
         let (data, creds): (RemoveSeriesData, _) = self
             .execute_graphql(API_V2, REMOVE_SERIES_MUTATION, Some(vars))

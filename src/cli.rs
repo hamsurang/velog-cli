@@ -42,6 +42,12 @@ pub enum Commands {
         command: PostCommands,
     },
     /// Search posts
+    #[command(after_long_help = "\
+Examples:
+  velog search rust                         # Search all posts
+  velog search rust --username velopert      # Search within a user's posts
+  velog search \"async await\" --limit 5      # Limit results
+  velog search rust --offset 20             # Paginate results")]
     Search {
         /// Search keyword
         keyword: String,
@@ -237,6 +243,15 @@ pub enum CommentCommands {
         file: Option<PathBuf>,
     },
     /// Reply to a comment
+    #[command(after_long_help = "\
+Comment Numbering:
+  Top-level comments are numbered 1, 2, 3, ...
+  Replies use dot notation: 1.1, 1.2, 2.1, ...
+  Use `velog comment list <slug>` to see comment numbers.
+
+Examples:
+  velog comment reply my-post 1 \"Great post!\"
+  velog comment reply my-post 1.2 --file reply.md")]
     Reply {
         /// Post URL slug
         post_slug: String,
@@ -275,6 +290,21 @@ pub enum CommentCommands {
 #[derive(Subcommand)]
 pub enum PostCommands {
     /// List posts (yours, trending, recent, or by user)
+    #[command(after_long_help = "\
+Listing Modes:
+  (default)    Your own posts (requires login)
+  --drafts     Your draft posts only
+  --trending   Trending posts across velog (public, no login needed)
+  --recent     Recent posts across velog (public, no login needed)
+  --username   Posts by a specific user (public, no login needed)
+  --tag        Posts with a specific tag
+
+Examples:
+  velog post list                          # Your published posts
+  velog post list --drafts                 # Your drafts
+  velog post list --trending --period day  # Today's trending
+  velog post list --username velopert      # Posts by velopert
+  velog post list --tag rust --limit 10    # Rust-tagged posts")]
     List {
         /// Show draft (temporary) posts instead of published
         #[arg(long, conflicts_with_all = ["trending", "recent", "username"])]
@@ -313,6 +343,12 @@ pub enum PostCommands {
         username: Option<String>,
     },
     /// Create a new post from a markdown file (or stdin)
+    #[command(after_long_help = "\
+Examples:
+  velog post create --title \"My Post\" --file post.md --tags rust,cli
+  velog post create --title \"Draft\" --file post.md
+  velog post create --title \"Published\" --file post.md --publish
+  cat post.md | velog post create --title \"Piped\" --publish")]
     Create {
         /// Path to markdown file (use "-" for stdin, omit to read piped stdin)
         #[arg(short, long)]

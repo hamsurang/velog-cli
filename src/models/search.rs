@@ -5,9 +5,15 @@ use super::post::Post;
 // ---- Search Response Wrapper ----
 
 #[derive(Deserialize)]
+pub struct SearchResult {
+    pub count: i32,
+    pub posts: Vec<Post>,
+}
+
+#[derive(Deserialize)]
 pub struct SearchPostsData {
     #[serde(rename = "searchPosts")]
-    pub search_posts: Vec<Post>,
+    pub search_posts: SearchResult,
 }
 
 // ---- Compact Search Result ----
@@ -43,29 +49,34 @@ mod tests {
     #[test]
     fn search_posts_data_deserializes() {
         let json = r#"{
-            "searchPosts": [
-                {
-                    "id": "s1", "title": "Rust Guide", "likes": 10,
-                    "url_slug": "rust-guide",
-                    "short_description": "A guide to Rust",
-                    "released_at": "2026-03-10T00:00:00.000Z",
-                    "updated_at": null, "tags": ["rust", "tutorial"],
-                    "user": { "username": "author1" },
-                    "thumbnail": null
-                }
-            ]
+            "searchPosts": {
+                "count": 42,
+                "posts": [
+                    {
+                        "id": "s1", "title": "Rust Guide", "likes": 10,
+                        "url_slug": "rust-guide",
+                        "short_description": "A guide to Rust",
+                        "released_at": "2026-03-10T00:00:00.000Z",
+                        "updated_at": null, "tags": ["rust", "tutorial"],
+                        "user": { "username": "author1" },
+                        "thumbnail": null
+                    }
+                ]
+            }
         }"#;
         let data: SearchPostsData = serde_json::from_str(json).unwrap();
-        assert_eq!(data.search_posts.len(), 1);
-        assert_eq!(data.search_posts[0].title, "Rust Guide");
-        assert_eq!(data.search_posts[0].tags.as_ref().unwrap().len(), 2);
+        assert_eq!(data.search_posts.count, 42);
+        assert_eq!(data.search_posts.posts.len(), 1);
+        assert_eq!(data.search_posts.posts[0].title, "Rust Guide");
+        assert_eq!(data.search_posts.posts[0].tags.as_ref().unwrap().len(), 2);
     }
 
     #[test]
     fn search_posts_data_empty() {
-        let json = r#"{ "searchPosts": [] }"#;
+        let json = r#"{ "searchPosts": { "count": 0, "posts": [] } }"#;
         let data: SearchPostsData = serde_json::from_str(json).unwrap();
-        assert!(data.search_posts.is_empty());
+        assert_eq!(data.search_posts.count, 0);
+        assert!(data.search_posts.posts.is_empty());
     }
 
     #[test]

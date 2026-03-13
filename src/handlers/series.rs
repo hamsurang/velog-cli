@@ -1,27 +1,23 @@
-use std::io::IsTerminal;
-
 use colored::Colorize;
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 
 use crate::cli::Format;
-use crate::client::VelogClient;
 use crate::models::{CompactSeries, CompactSeriesDetail};
 use crate::output;
 
-use super::{maybe_save_creds, validate_username, with_auth_client};
+use super::{
+    confirm_destructive, maybe_save_creds, resolve_client, validate_username, with_auth_client,
+};
 
 // ---- Series handlers ----
 
 /// 시리즈 목록 조회
-pub async fn series_list(
-    username: Option<&str>,
-    format: Format,
-) -> anyhow::Result<()> {
+pub async fn series_list(username: Option<&str>, format: Format) -> anyhow::Result<()> {
     if let Some(u) = username {
         validate_username(u)?;
     }
 
-    let (client, resolved_username) = resolve_series_client(username).await?;
+    let (client, resolved_username) = resolve_client(username).await?;
     let series_list = client.get_series_list(&resolved_username).await?;
 
     match format {
@@ -48,8 +44,7 @@ pub async fn series_list(
             println!("{table}");
         }
         Format::Compact | Format::Silent => {
-            let compact: Vec<CompactSeries> =
-                series_list.iter().map(CompactSeries::from).collect();
+            let compact: Vec<CompactSeries> = series_list.iter().map(CompactSeries::from).collect();
             output::emit_data(format, &compact);
         }
     }
@@ -57,16 +52,12 @@ pub async fn series_list(
 }
 
 /// 시리즈 상세 조회
-pub async fn series_show(
-    slug: &str,
-    username: Option<&str>,
-    format: Format,
-) -> anyhow::Result<()> {
+pub async fn series_show(slug: &str, username: Option<&str>, format: Format) -> anyhow::Result<()> {
     if let Some(u) = username {
         validate_username(u)?;
     }
 
-    let (client, resolved_username) = resolve_series_client(username).await?;
+    let (client, resolved_username) = resolve_client(username).await?;
     let series = client.get_series(&resolved_username, slug).await?;
 
     match format {
@@ -110,11 +101,7 @@ pub async fn series_show(
 }
 
 /// 시리즈 생성
-pub async fn series_create(
-    name: &str,
-    slug: Option<&str>,
-    format: Format,
-) -> anyhow::Result<()> {
+pub async fn series_create(name: &str, slug: Option<&str>, format: Format) -> anyhow::Result<()> {
     validate_series_name(name)?;
 
     let (mut client, _username) = with_auth_client().await?;
@@ -170,11 +157,9 @@ pub async fn series_edit(
 
         let mut ids = Vec::with_capacity(slugs.len());
         for s in &slugs {
-            let found = posts.iter().find(|sp| {
-                sp.post
-                    .as_ref()
-                    .is_some_and(|p| p.url_slug == *s)
-            });
+            let found = posts
+                .iter()
+                .find(|sp| sp.post.as_ref().is_some_and(|p| p.url_slug == *s));
             match found {
                 Some(sp) => {
                     let sp_id = sp
@@ -225,11 +210,7 @@ pub async fn series_edit(
 }
 
 /// 시리즈 삭제
-pub async fn series_delete(
-    slug: &str,
-    yes: bool,
-    format: Format,
-) -> anyhow::Result<()> {
+pub async fn series_delete(slug: &str, yes: bool, format: Format) -> anyhow::Result<()> {
     let (mut client, username) = with_auth_client().await?;
 
     let series = client.get_series(&username, slug).await?;
@@ -269,29 +250,9 @@ pub async fn series_delete(
 
 // ---- Helpers ----
 
-/// 확인 프롬프트 (destructive 작업용)
-pub(crate) fn confirm_destructive(message: &str, yes_flag: bool) -> anyhow::Result<bool> {
-    if yes_flag {
-        return Ok(true);
-    }
-    if !std::io::stdin().is_terminal() {
-        anyhow::bail!("Cannot confirm in non-interactive mode. Use -y to skip confirmation.");
-    }
-    eprint!("{} [y/N] ", message);
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
-    Ok(input.trim().eq_ignore_ascii_case("y"))
-}
-
 fn validate_series_name(name: &str) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        !name.trim().is_empty(),
-        "Series name cannot be empty"
-    );
-    anyhow::ensure!(
-        name.len() <= 255,
-        "Series name too long (max 255 chars)"
-    );
+    anyhow::ensure!(!name.trim().is_empty(), "Series name cannot be empty");
+    anyhow::ensure!(name.len() <= 255, "Series name too long (max 255 chars)");
     Ok(())
 }
 
@@ -299,30 +260,12 @@ fn validate_series_name(name: &str) -> anyhow::Result<()> {
 fn generate_slug(name: &str) -> String {
     name.to_lowercase()
         .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() {
-                c
-            } else {
-                '-'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect::<String>()
         .split('-')
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("-")
-}
-
-/// username이 지정되면 anonymous 클라이언트, 아니면 인증 클라이언트에서 username 획득
-async fn resolve_series_client(
-    username: Option<&str>,
-) -> anyhow::Result<(VelogClient, String)> {
-    if let Some(u) = username {
-        let client = VelogClient::anonymous()?;
-        Ok((client, u.to_string()))
-    } else {
-        with_auth_client().await
-    }
 }
 
 #[cfg(test)]

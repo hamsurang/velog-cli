@@ -10,6 +10,7 @@ use super::{maybe_save_creds, with_auth_client};
 // ---- Stats handler ----
 
 pub async fn stats(slug: &str, format: Format) -> anyhow::Result<()> {
+    super::validate_slug_nonempty(slug)?;
     let (mut client, username) = with_auth_client().await?;
 
     // slug → post ID 변환
@@ -22,15 +23,17 @@ pub async fn stats(slug: &str, format: Format) -> anyhow::Result<()> {
 
     let today = today_str();
     let yesterday = yesterday_str();
+    let compact = CompactStats::from_stats(&stats, &today, &yesterday);
 
     match format {
         Format::Pretty => {
-            let compact = CompactStats::from_stats(&stats, &today, &yesterday);
-
             println!("{}", format!("Stats for '{}'", slug).bold());
             println!();
             println!("  Total views:     {}", format_number(compact.total).cyan());
-            println!("  Today:           {}", format_number(compact.today).green());
+            println!(
+                "  Today:           {}",
+                format_number(compact.today).green()
+            );
             println!("  Yesterday:       {}", format_number(compact.yesterday));
             println!();
 
@@ -47,7 +50,6 @@ pub async fn stats(slug: &str, format: Format) -> anyhow::Result<()> {
             }
         }
         Format::Compact | Format::Silent => {
-            let compact = CompactStats::from_stats(&stats, &today, &yesterday);
             output::emit_data(format, &compact);
         }
     }
