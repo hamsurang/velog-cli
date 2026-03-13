@@ -24,7 +24,7 @@ pub use tag::*;
 
 // ---- Helper functions ----
 
-/// credentials 로드 실패 시 AuthError 반환 (exit code 2)
+/// credentials 로드 실패 시 AuthError 반환 (exit code 1)
 pub(crate) fn require_auth() -> anyhow::Result<Credentials> {
     auth::load_credentials()?.ok_or_else(|| {
         anyhow::Error::new(AuthError).context("Not logged in. Run `velog auth login` first.")
