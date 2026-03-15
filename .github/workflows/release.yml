@@ -86,7 +86,7 @@ jobs:
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       - name: Fetch local artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: target/distrib/
@@ -129,13 +129,13 @@ jobs:
         with:
           submodules: recursive
       - name: Install cached dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
       - name: Fetch local artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: target/distrib/
@@ -176,13 +176,13 @@ jobs:
         with:
           submodules: recursive
       - name: Install cached dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
       - name: Fetch artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: target/distrib/
@@ -200,7 +200,7 @@ jobs:
           name: artifacts-dist-manifest
           path: dist-manifest.json
       - name: "Download GitHub Artifacts"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: artifacts
@@ -236,7 +236,7 @@ jobs:
           repository: "hamsurang/homebrew-velog-cli"
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       - name: Fetch homebrew formulae
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: Formula/
