@@ -35,7 +35,7 @@ serde_json = "1"
 anyhow = "1"
 
 # Directories
-dirs = "5"
+dirs = "6"
 
 # Terminal output
 comfy-table = "7"
