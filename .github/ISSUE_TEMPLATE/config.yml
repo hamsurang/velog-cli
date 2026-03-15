@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: velog.io Issues
+    url: https://github.com/velopert/velog-client/issues
+    about: For issues with velog.io itself (not velog-cli)
