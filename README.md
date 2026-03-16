@@ -158,6 +158,15 @@ Pre-commit hooks automatically run `cargo fmt-check`, `clippy`, `typos`, and `ca
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full guidelines.
 
+## Disclaimer
+
+This is an **unofficial** tool and is not affiliated with, endorsed by,
+or associated with [velog.io](https://velog.io) or Chaf Inc.
+
+"velog" is a trademark of Chaf Inc. All product names, logos, and brands
+are property of their respective owners. Use of these names does not
+imply endorsement.
+
 ## License
 
 [MIT](LICENSE)
