@@ -19,7 +19,11 @@ pub enum Format {
 }
 
 #[derive(Parser)]
-#[command(name = "velog", about = "Unofficial CLI client for velog.io — not affiliated with velog.io or Chaf Inc.", version)]
+#[command(
+    name = "velog",
+    about = "Unofficial CLI client for velog.io — not affiliated with velog.io or Chaf Inc.",
+    version
+)]
 pub struct Cli {
     /// Output format
     #[arg(long, global = true, value_enum, default_value_t = Format::Pretty)]
