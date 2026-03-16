@@ -47,6 +47,12 @@ tests/
 - Keep functions small and focused
 - Use `anyhow` for error handling
 
+## Questions & Discussions
+
+- **Bug reports**: [Open an issue](https://github.com/hamsurang/velog-cli/issues/new?template=bug-report.yml)
+- **Feature ideas**: [Start a discussion](https://github.com/hamsurang/velog-cli/discussions/categories/ideas) first, then create an issue
+- **Usage questions**: [Q&A discussions](https://github.com/hamsurang/velog-cli/discussions/categories/q-a)
+
 ## Reporting Issues
 
 Use [GitHub Issues](https://github.com/hamsurang/velog-cli/issues) to report bugs or request features.
