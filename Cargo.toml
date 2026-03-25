@@ -40,7 +40,7 @@ dirs = "5"
 # Terminal output
 comfy-table = "7"
 colored = "2"
-termimad = "0.30"
+termimad = "0.34"
 
 # Input
 rpassword = "7"
